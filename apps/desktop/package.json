@@ -1,0 +1,27 @@
+{
+  "name": "@softglaze/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "main": "main.cjs",
+  "description": "SoftGlaze desktop shell (Electron) — wraps the same server + web app",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.softglaze.stockmanager",
+    "productName": "SoftGlaze Stock Manager",
+    "directories": { "output": "release" },
+    "files": ["main.cjs", "preload.cjs"],
+    "extraResources": [
+      { "from": "../server/dist", "to": "server" },
+      { "from": "../web/dist", "to": "web" }
+    ],
+    "win": { "target": "nsis" },
+    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true }
+  }
+}

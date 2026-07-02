@@ -1,0 +1,499 @@
+// SoftGlaze — Complete Database Schema
+// Covers: users/roles, categories, units, products+images, customers, vendors,
+// purchases, sales/POS, returns, payments, expenses, stock ledger, audit log, settings.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql" // For pure-offline desktop you can switch to "sqlite" (see docs/07-DEPLOYMENT.md)
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────── AUTH & USERS ───────────────────────────
+
+enum Role {
+  SUPER_ADMIN // global owner: settings, business type, integrations, everything
+  ADMIN      // everything except super-admin global settings
+  MANAGER    // everything except user management & settings
+  CASHIER    // POS, customers, view products
+  ACCOUNTANT // payments, expenses, reports, ledgers
+}
+
+model User {
+  id           String    @id @default(cuid())
+  name         String
+  email        String    @unique
+  phone        String?
+  passwordHash String
+  role         Role      @default(CASHIER)
+  isActive     Boolean   @default(true)
+  refreshToken String?   // hashed refresh token
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  sales        Sale[]
+  purchases    Purchase[]
+  payments     Payment[]
+  expenses     Expense[]
+  adjustments  StockAdjustment[]
+  auditLogs    AuditLog[]
+  salariesPaid SalaryPayment[]
+}
+
+// ─────────────────────────── MASTER DATA ───────────────────────────
+
+model Category {
+  id        String     @id @default(cuid())
+  name      String     @unique          // Cement, Iron Rods, Windows, Doors, Pipes...
+  parentId  String?
+  parent    Category?  @relation("SubCategories", fields: [parentId], references: [id])
+  children  Category[] @relation("SubCategories")
+  image     String?
+  isActive  Boolean    @default(true)
+  createdAt DateTime   @default(now())
+
+  products  Product[]
+}
+
+model Unit {
+  id         String  @id @default(cuid())
+  name       String  @unique   // Bag, Kg, Ton, Piece, Foot, Sq-Ft, Bundle, Length
+  shortName  String  @unique   // bag, kg, t, pc, ft, sqft, bdl, len
+  // Optional conversion to a base unit (e.g. Ton -> base Kg, factor 1000)
+  baseUnitId String?
+  baseUnit   Unit?   @relation("UnitConversion", fields: [baseUnitId], references: [id])
+  derived    Unit[]  @relation("UnitConversion")
+  factor     Decimal @default(1) @db.Decimal(18, 6)
+
+  products   Product[]
+}
+
+model Product {
+  id             String   @id @default(cuid())
+  sku            String   @unique            // auto-generated e.g. IRN-0001
+  barcode        String?  @unique
+  name           String                       // "Sariya 12mm Grade-60", "Lucky Cement 50kg"
+  description    String?
+  categoryId     String
+  category       Category @relation(fields: [categoryId], references: [id])
+  unitId         String
+  unit           Unit     @relation(fields: [unitId], references: [id])
+  costPrice      Decimal  @default(0) @db.Decimal(18, 2) // weighted avg, auto-updated on purchase
+  salePrice      Decimal  @default(0) @db.Decimal(18, 2)
+  wholesalePrice Decimal? @db.Decimal(18, 2)
+  taxPercent     Decimal  @default(0) @db.Decimal(5, 2)
+  stockQty       Decimal  @default(0) @db.Decimal(18, 3)  // cached; ledger is source of truth
+  minStockLevel  Decimal  @default(0) @db.Decimal(18, 3)  // low-stock alert threshold
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  images         ProductImage[]
+  saleItems      SaleItem[]
+  purchaseItems  PurchaseItem[]
+  stockMoves     StockMovement[]
+  adjustmentItems StockAdjustmentItem[]
+
+  @@index([name])
+  @@index([categoryId])
+}
+
+model ProductImage {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  path      String              // /uploads/products/xxx.webp
+  thumbPath String?
+  isPrimary Boolean @default(false)
+  sortOrder Int     @default(0)
+}
+
+// ─────────────────────────── PARTIES ───────────────────────────
+
+model Customer {
+  id             String   @id @default(cuid())
+  code           String   @unique          // CUS-0001
+  name           String
+  phone          String?
+  address        String?
+  taxNumber      String?                    // CNIC / NTN
+  openingBalance Decimal  @default(0) @db.Decimal(18, 2)
+  balance        Decimal  @default(0) @db.Decimal(18, 2) // +ve = customer owes us (receivable)
+  creditLimit    Decimal  @default(0) @db.Decimal(18, 2)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  sales    Sale[]
+  payments Payment[]
+
+  @@index([name])
+  @@index([phone])
+}
+
+model Vendor {
+  id             String   @id @default(cuid())
+  code           String   @unique          // VEN-0001
+  name           String
+  phone          String?
+  address        String?
+  taxNumber      String?
+  bankDetails    String?
+  openingBalance Decimal  @default(0) @db.Decimal(18, 2)
+  balance        Decimal  @default(0) @db.Decimal(18, 2) // +ve = we owe vendor (payable)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  purchases Purchase[]
+  payments  Payment[]
+
+  @@index([name])
+}
+
+// ─────────────────────────── PURCHASING ───────────────────────────
+
+enum PurchaseStatus {
+  DRAFT
+  RECEIVED
+  RETURNED
+  CANCELLED
+}
+
+model Purchase {
+  id           String         @id @default(cuid())
+  invoiceNo    String         @unique       // PUR-000123 (auto)
+  vendorId     String
+  vendor       Vendor         @relation(fields: [vendorId], references: [id])
+  userId       String
+  user         User           @relation(fields: [userId], references: [id])
+  refInvoiceNo String?                       // vendor's own bill number
+  date         DateTime       @default(now())
+  status       PurchaseStatus @default(RECEIVED)
+  subTotal     Decimal        @default(0) @db.Decimal(18, 2)
+  discount     Decimal        @default(0) @db.Decimal(18, 2)
+  tax          Decimal        @default(0) @db.Decimal(18, 2)
+  otherCharges Decimal        @default(0) @db.Decimal(18, 2) // freight/loading
+  grandTotal   Decimal        @default(0) @db.Decimal(18, 2)
+  paidAmount   Decimal        @default(0) @db.Decimal(18, 2)
+  dueAmount    Decimal        @default(0) @db.Decimal(18, 2)
+  notes        String?
+  isReturn     Boolean        @default(false) // purchase return document
+  returnOfId   String?                         // original purchase if return
+  createdAt    DateTime       @default(now())
+
+  items        PurchaseItem[]
+  payments     Payment[]
+
+  @@index([date])
+  @@index([vendorId])
+}
+
+model PurchaseItem {
+  id         String   @id @default(cuid())
+  purchaseId String
+  purchase   Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id])
+  qty        Decimal  @db.Decimal(18, 3)
+  unitCost   Decimal  @db.Decimal(18, 2)
+  discount   Decimal  @default(0) @db.Decimal(18, 2)
+  total      Decimal  @db.Decimal(18, 2)
+}
+
+// ─────────────────────────── SALES / POS ───────────────────────────
+
+enum SaleStatus {
+  DRAFT       // held bill
+  COMPLETED
+  RETURNED
+  CANCELLED
+  QUOTATION
+}
+
+model Sale {
+  id          String     @id @default(cuid())
+  invoiceNo   String     @unique             // INV-000456 (auto)
+  customerId  String?                         // null = walk-in customer
+  customer    Customer?  @relation(fields: [customerId], references: [id])
+  userId      String                          // cashier
+  user        User       @relation(fields: [userId], references: [id])
+  date        DateTime   @default(now())
+  status      SaleStatus @default(COMPLETED)
+  subTotal    Decimal    @default(0) @db.Decimal(18, 2)
+  discount    Decimal    @default(0) @db.Decimal(18, 2)   // bill-level discount
+  tax         Decimal    @default(0) @db.Decimal(18, 2)
+  otherCharges Decimal   @default(0) @db.Decimal(18, 2)   // delivery/loading
+  grandTotal  Decimal    @default(0) @db.Decimal(18, 2)
+  paidAmount  Decimal    @default(0) @db.Decimal(18, 2)
+  dueAmount   Decimal    @default(0) @db.Decimal(18, 2)   // credit (udhaar)
+  totalCost   Decimal    @default(0) @db.Decimal(18, 2)   // COGS snapshot → instant profit
+  profit      Decimal    @default(0) @db.Decimal(18, 2)   // grandTotal - totalCost
+  notes       String?
+  isReturn    Boolean    @default(false)
+  returnOfId  String?                                      // original sale if return
+  createdAt   DateTime   @default(now())
+
+  items       SaleItem[]
+  payments    Payment[]
+
+  @@index([date])
+  @@index([customerId])
+  @@index([status])
+}
+
+model SaleItem {
+  id        String  @id @default(cuid())
+  saleId    String
+  sale      Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  qty       Decimal @db.Decimal(18, 3)
+  unitPrice Decimal @db.Decimal(18, 2)
+  unitCost  Decimal @db.Decimal(18, 2)   // cost snapshot at time of sale
+  discount  Decimal @default(0) @db.Decimal(18, 2)
+  taxAmount Decimal @default(0) @db.Decimal(18, 2)
+  total     Decimal @db.Decimal(18, 2)
+}
+
+// ─────────────────────────── PAYMENTS & MONEY ───────────────────────────
+
+enum PaymentType {
+  SALE_RECEIPT       // money in from a sale (at POS)
+  CUSTOMER_RECEIPT   // money in against customer balance
+  PURCHASE_PAYMENT   // money out for a purchase
+  VENDOR_PAYMENT     // money out against vendor balance
+  EXPENSE            // money out - expense
+  REFUND_OUT         // refund to customer
+  REFUND_IN          // refund from vendor
+}
+
+model PaymentMethod {
+  id       String    @id @default(cuid())
+  name     String    @unique   // Cash, Meezan Bank, JazzCash, EasyPaisa, Card
+  isCash   Boolean   @default(false)
+  isActive Boolean   @default(true)
+  payments Payment[]
+}
+
+model Payment {
+  id         String        @id @default(cuid())
+  refNo      String        @unique            // PAY-000789 (auto)
+  type       PaymentType
+  methodId   String
+  method     PaymentMethod @relation(fields: [methodId], references: [id])
+  amount     Decimal       @db.Decimal(18, 2)
+  date       DateTime      @default(now())
+  customerId String?
+  customer   Customer?     @relation(fields: [customerId], references: [id])
+  vendorId   String?
+  vendor     Vendor?       @relation(fields: [vendorId], references: [id])
+  saleId     String?
+  sale       Sale?         @relation(fields: [saleId], references: [id])
+  purchaseId String?
+  purchase   Purchase?     @relation(fields: [purchaseId], references: [id])
+  expenseId  String?       @unique
+  expense    Expense?      @relation(fields: [expenseId], references: [id])
+  userId     String
+  user       User          @relation(fields: [userId], references: [id])
+  notes      String?
+  createdAt  DateTime      @default(now())
+
+  @@index([date])
+  @@index([type])
+}
+
+model ExpenseCategory {
+  id       String    @id @default(cuid())
+  name     String    @unique   // Rent, Salaries, Electricity, Transport, Tea/Misc
+  expenses Expense[]
+}
+
+model Expense {
+  id         String          @id @default(cuid())
+  refNo      String          @unique          // EXP-000012
+  categoryId String
+  category   ExpenseCategory @relation(fields: [categoryId], references: [id])
+  amount     Decimal         @db.Decimal(18, 2)
+  date       DateTime        @default(now())
+  notes      String?
+  userId     String
+  user       User            @relation(fields: [userId], references: [id])
+  payment    Payment?
+  createdAt  DateTime        @default(now())
+
+  @@index([date])
+}
+
+// ─────────────────────────── STOCK LEDGER ───────────────────────────
+
+enum StockMoveType {
+  PURCHASE
+  PURCHASE_RETURN
+  SALE
+  SALE_RETURN
+  ADJUSTMENT_IN
+  ADJUSTMENT_OUT
+  DAMAGE
+  OPENING
+}
+
+// Source of truth for stock. Product.stockQty is a cached sum.
+model StockMovement {
+  id        String        @id @default(cuid())
+  productId String
+  product   Product       @relation(fields: [productId], references: [id])
+  type      StockMoveType
+  qty       Decimal       @db.Decimal(18, 3)  // +in / -out
+  unitCost  Decimal?      @db.Decimal(18, 2)
+  refType   String?                            // "SALE" | "PURCHASE" | "ADJUSTMENT"
+  refId     String?                            // id of the sale/purchase/adjustment
+  balance   Decimal       @db.Decimal(18, 3)   // running stock after this move
+  date      DateTime      @default(now())
+  notes     String?
+
+  @@index([productId, date])
+}
+
+model StockAdjustment {
+  id        String                @id @default(cuid())
+  refNo     String                @unique      // ADJ-000005
+  reason    String                              // Damage, Count correction, Theft...
+  date      DateTime              @default(now())
+  userId    String
+  user      User                  @relation(fields: [userId], references: [id])
+  items     StockAdjustmentItem[]
+  createdAt DateTime              @default(now())
+}
+
+model StockAdjustmentItem {
+  id           String          @id @default(cuid())
+  adjustmentId String
+  adjustment   StockAdjustment @relation(fields: [adjustmentId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product         @relation(fields: [productId], references: [id])
+  qtyChange    Decimal         @db.Decimal(18, 3) // +5 or -3
+}
+
+
+// ─────────────────────────── EMPLOYEES & SALARIES ───────────────────────────
+
+model Employee {
+  id          String   @id @default(cuid())
+  code        String   @unique          // EMP-0001
+  name        String
+  phone       String?
+  cnic        String?                    // national ID
+  address     String?
+  designation String?                    // Salesman, Loader, Accountant, Driver...
+  photo       String?                    // /uploads/employees/xxx.webp
+  joinDate    DateTime @default(now())
+  baseSalary  Decimal  @default(0) @db.Decimal(18, 2)   // monthly
+  isActive    Boolean  @default(true)
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  salaries    SalaryPayment[]
+}
+
+// Paying a salary also creates an Expense (category "Salaries") in the same
+// transaction so P&L stays correct automatically.
+model SalaryPayment {
+  id         String   @id @default(cuid())
+  refNo      String   @unique            // SAL-000012
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  month      String                       // "2026-06" — the salary period
+  baseAmount Decimal  @db.Decimal(18, 2)
+  bonus      Decimal  @default(0) @db.Decimal(18, 2)
+  deduction  Decimal  @default(0) @db.Decimal(18, 2)   // advances, penalties
+  netPaid    Decimal  @db.Decimal(18, 2)                // base + bonus - deduction
+  date       DateTime @default(now())
+  notes      String?
+  userId     String                        // who paid
+  user       User     @relation(fields: [userId], references: [id])
+  expenseId  String?  @unique              // linked auto-created Expense row
+  createdAt  DateTime @default(now())
+
+  @@unique([employeeId, month])            // one salary per employee per month
+  @@index([month])
+}
+
+// ─────────────────────────── NOTIFICATIONS & MESSAGING ───────────────────────────
+
+enum NotificationType {
+  LOW_STOCK        // product fell below minStockLevel
+  DEBT_REMINDER    // customer receivable pending too long
+  PAYABLE_REMINDER // vendor payment due
+  CREDIT_LIMIT     // customer crossed credit limit
+  SYSTEM           // backups, errors, announcements
+}
+
+// In-app notification bell (generated by server-side checks / cron)
+model Notification {
+  id        String           @id @default(cuid())
+  type      NotificationType
+  title     String
+  message   String
+  entity    String?           // "Product" | "Customer" | "Vendor"
+  entityId  String?
+  isRead    Boolean          @default(false)
+  userId    String?           // null = broadcast to all users
+  createdAt DateTime         @default(now())
+
+  @@index([isRead, createdAt])
+}
+
+enum MessageChannel {
+  WHATSAPP
+  EMAIL
+}
+
+enum MessageStatus {
+  QUEUED
+  SENT
+  FAILED
+  CLICKED    // for wa.me link mode: link was generated/opened
+}
+
+// Every WhatsApp/Email we send (sale receipts, purchase confirmations,
+// debt reminders, statements) is logged here for the audit trail.
+model MessageLog {
+  id        String         @id @default(cuid())
+  channel   MessageChannel
+  recipient String                         // phone or email
+  template  String                         // SALE_RECEIPT, PURCHASE_CONFIRM, DEBT_REMINDER, STATEMENT
+  refType   String?                        // "Sale" | "Purchase" | "Customer"
+  refId     String?
+  status    MessageStatus  @default(QUEUED)
+  error     String?
+  createdAt DateTime       @default(now())
+
+  @@index([createdAt])
+}
+
+// ─────────────────────────── SYSTEM ───────────────────────────
+
+model Setting {
+  key   String @id      // shop_name, shop_logo, address, phone, tax_percent, currency, invoice_footer, receipt_size
+  value String
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String            // LOGIN, CREATE_SALE, DELETE_PRODUCT, UPDATE_SETTING...
+  entity    String?           // Sale, Product...
+  entityId  String?
+  details   String?           // JSON string of changes
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model Counter {
+  key   String @id  // "sale", "purchase", "payment", "customer", "vendor", "expense", "adjustment", "sku", "employee", "salary"
+  value Int    @default(0)
+}

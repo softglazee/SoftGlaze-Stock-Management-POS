@@ -1,0 +1,11 @@
+node_modules/
+dist/
+build/
+release/
+.env
+.env.local
+apps/server/uploads/
+*.log
+.DS_Store
+*.sql.gz
+apps/server/prisma/migrations/dev.db*
