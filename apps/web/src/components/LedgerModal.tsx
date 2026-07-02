@@ -1,11 +1,21 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Printer } from "lucide-react";
+import { Printer, MessageCircle } from "lucide-react";
 import { api } from "../lib/api";
 import { CustomerLedger, VendorLedger } from "../lib/types";
-import { fmtMoney } from "../lib/format";
+import { fmtMoney, num } from "../lib/format";
 import { Modal, TableSkeleton, EmptyState } from "./ui";
 import { printCustomerStatement, printVendorStatement } from "../lib/statement";
+
+/** 0300… → 92300…; keep 92… and already-international numbers. */
+function waNumber(phone: string) {
+  const d = phone.replace(/\D/g, "");
+  if (d.startsWith("0")) return "92" + d.slice(1);
+  return d;
+}
+function fillTemplate(tpl: string, vars: Record<string, string>) {
+  return tpl.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? "");
+}
 
 /** Statement viewer for a customer (receivable) or vendor (payable), with PDF print. */
 export default function LedgerModal({
@@ -39,6 +49,18 @@ export default function LedgerModal({
     else printVendorStatement(data as VendorLedger, settings);
   }
 
+  const phone = kind === "customer" ? (data as CustomerLedger | undefined)?.customer?.phone : null;
+  const waEnabled = kind === "customer" && !!phone && (settingsData?.settings.whatsapp_mode ?? "walink") !== "off" && num(closing) > 0;
+
+  function sendReminder() {
+    const s = settingsData?.settings ?? {};
+    const tpl = s.tmpl_wa_reminder || "Dear {customer}, your balance at *{shop}* is {due}. Kindly clear it soon. Thank you.";
+    const msg = fillTemplate(tpl, { shop: s.shop_name || "our shop", customer: name, due: `${s.currency_symbol || "₨"} ${Number(closing).toLocaleString("en-PK")}` });
+    const url = `https://wa.me/${waNumber(phone!)}?text=${encodeURIComponent(msg)}`;
+    window.open(url, "_blank");
+    api("/messages/log", { method: "POST", body: { channel: "WHATSAPP", recipient: phone, template: "DEBT_REMINDER", refType: "Customer", refId: id } }).catch(() => {});
+  }
+
   return (
     <Modal open onClose={onClose} title={`Statement — ${name}`} wide>
       <div className="space-y-3">
@@ -52,6 +74,11 @@ export default function LedgerModal({
             <input type="date" className="input !w-40" value={to} onChange={(e) => setTo(e.target.value)} />
           </div>
           <div className="flex-1" />
+          {waEnabled && (
+            <button className="btn btn-secondary !text-success !border-success/40" onClick={sendReminder}>
+              <MessageCircle size={15} /> WhatsApp reminder
+            </button>
+          )}
           <button className="btn btn-secondary" onClick={doPrint} disabled={!data}>
             <Printer size={15} /> Print / PDF
           </button>

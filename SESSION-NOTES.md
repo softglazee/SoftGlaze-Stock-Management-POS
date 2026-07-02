@@ -3,7 +3,21 @@
 > Living hand-off file. Updated after every module or mid-task stop.
 > Read this at the start of every session (see CLAUDE.md → Grounding & session continuity rules).
 
-## Current status (2026-07-02) — Phase 5 COMPLETE ✅ (Reports & Dashboard)
+## Current status (2026-07-02) — Phase 6 COMPLETE ✅ (Admin & Integrations)
+
+No schema change (all Phase 6 models existed). New deps: nodemailer, node-cron (+types). Both apps tsc clean; backend verified 21/21 (users CRUD + role rules, integration secret masking, graceful SMTP-test failure + logging, message log, notification sweep, audit 103 entries, **backup export→wipe→restore round-trip with integrity all-green**); web smoke (Users + all 6 Settings tabs + bell, 0 console errors). Test residue cleaned (1 owner user, integrity ₨0).
+
+**Server:** `users.routes.ts` (list/create/update/reset-password/deactivate; owner protected, no self-lockout, only SUPER_ADMIN grants ADMIN). `notifications.routes.ts` + `lib/notify.ts` (runSweep: low-stock/debt/payable, deduped vs unread) + **node-cron** daily sweep in index.ts at `low_stock_sweep_time`. `messages.routes.ts` (MessageLog list + /log for client wa.me sends). `audit.routes.ts` (GET /audit, filters, distinct actions). `backup.routes.ts` (GET /export full JSON snapshot, /summary, POST /restore SUPER_ADMIN wipe+reload in FK order — express.json limit raised to 50mb). `lib/mailer.ts` (nodemailer from saved SMTP). Extended `settings.routes.ts`: INTEGRATION_KEYS + SECRET_KEYS (smtp_pass masked in GET /settings via `smtp_pass_set` flag, never overwritten by blank), GET/PATCH /settings/integrations, POST /settings/test-email (logs MessageLog). Mounted users/notifications/messages/audit/backup.
+
+**Web:** `pages/Users.tsx`; `pages/Settings.tsx` (tabs: Shop Profile+logo/favicon+**live invoice preview**, Business Type apply-preset, Roles & Permissions matrix editor, Integrations SMTP+test+WhatsApp+templates, Backup export/restore, Audit Log); `pages/Notifications.tsx`; `components/NotificationBell.tsx` (polls unread every 60s, mounted in Layout footer + mobile bar). `LedgerModal` got a WhatsApp debt-reminder (wa.me + MessageLog). Nav: Users & Roles added; Settings opened to ACCOUNTANT. App routes /users, /settings, /notifications live (removed ComingSoon). types.ts: ManagedUser, AppNotification, MessageLogEntry, AuditLogEntry, PermissionMatrix.
+
+**Deferred (documented):** G9 display-currency switcher (books already PKR-locked; lowest priority). SMS gateway interface (ship-disabled; needs a provider). Server-side pdfmake for invoices/statements (reports already do it; invoices still browser Save-as-PDF). WhatsApp Cloud API v2 (wa.me covers v1). Full pg_dump backup (portable JSON backup shipped instead).
+
+**Next (Phase 7 — Desktop):** wire Electron prod mode (spawn built server, load built web, %APPDATA% uploads), build the Windows installer (SoftGlaze-Stock-Manager-Setup.exe), test on a clean PC. Then Phase 8 (VPS deploy + HTTPS + daily backup) and Phase 9 (launch). Do NOT start without the owner's "go".
+
+---
+
+## Phase 5 COMPLETE ✅ (Reports & Dashboard)
 
 No schema change. Both apps typecheck clean; backend verified 31/31 (P&L acceptance docs/09 §8 + price-volatility re-run + every report JSON/PDF/Excel + integrity all-green, balance sheet imbalance ₨0); web smoke-tested (dashboard charts render, Reports page renders P&L ₨51,450 with PDF/Excel, 0 console errors). Test data cleaned; counters reset.
 

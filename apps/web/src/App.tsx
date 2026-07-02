@@ -21,6 +21,9 @@ import Payments from "./pages/Payments";
 import Expenses from "./pages/Expenses";
 import Employees from "./pages/Employees";
 import Reports from "./pages/Reports";
+import Users from "./pages/Users";
+import SettingsPage from "./pages/Settings";
+import Notifications from "./pages/Notifications";
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -31,19 +34,6 @@ function Protected({ children }: { children: React.ReactNode }) {
   }
   if (!user) return <Navigate to="/login" replace />;
   return <>{children}</>;
-}
-
-// Temporary placeholder until we build each module in its phase
-function ComingSoon({ title, phase }: { title: string; phase: string }) {
-  return (
-    <div className="card p-10 text-center">
-      <h1 className="text-xl font-bold mb-2">{title}</h1>
-      <p className="text-muted">
-        This module is scheduled for <span className="text-accent font-semibold">{phase}</span> in
-        docs/01-BUILD-PLAN.md — we'll build it together next.
-      </p>
-    </div>
-  );
 }
 
 export default function App() {
@@ -93,7 +83,9 @@ export default function App() {
         <Route path="/expenses" element={<Expenses />} />
         <Route path="/employees" element={<Employees />} />
         <Route path="/reports" element={<Reports />} />
-        <Route path="/settings" element={<ComingSoon title="Settings" phase="Phase 6" />} />
+        <Route path="/users" element={<Users />} />
+        <Route path="/notifications" element={<Notifications />} />
+        <Route path="/settings" element={<SettingsPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

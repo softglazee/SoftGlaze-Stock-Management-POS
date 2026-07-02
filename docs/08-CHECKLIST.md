@@ -67,13 +67,16 @@ Tick things off as we build. Mirrors the phases in 01-BUILD-PLAN.md.
 - [x] G10 Valuation at **sale-price** variant · **Sales by payment method** report · price-volatility + P&L acceptance (docs/09 §8) **re-run: 31/31 pass, integrity all-green, balance sheet ₨0**
 - Fix: balance sheet now recognises inventory **revaluation** (manual cost edits + weighted-avg rounding) in retained earnings → Assets = Liabilities + Equity exactly through price changes. Fixed a dashboard timezone bug (day buckets now use local dates so today's sales appear).
 
-## Phase 6 — Admin
-- [ ] Users & roles UI  ·  [ ] Permission enforcement tested per role
-- [ ] Settings (logo, tax, invoice footer)  ·  [ ] Audit log  ·  [ ] Backup/restore
-- [ ] A1 Shop Profile full UI with live invoice preview
-- [ ] A2 Roles & Permissions matrix editor (SUPER_ADMIN)
-- [ ] G8 Message template editor (+ SMS gateway interface, shipped disabled)
-- [ ] G9 Display-currency switcher (books stay PKR)
+## Phase 6 — Admin  (completed 2026-07-02)
+- [x] Users & roles UI (create/edit/reset-password/disable; role rules enforced server-side — owner protected, no self-lockout, only owner grants Admin) · [x] Permission enforcement verified (requirePermission across all routes)
+- [x] Settings: full Shop Profile (identity/contact/legal/invoice/regional) + logo & favicon upload + **live invoice preview** · [x] Audit log viewer (GET /audit, filters) · [x] Backup/restore (portable JSON export + wipe-and-restore, verified round-trip keeps integrity green)
+- [x] A1 Shop Profile full UI with live invoice preview
+- [x] A2 Roles & Permissions matrix editor (SUPER_ADMIN — toggle per role, reset-to-defaults, live cache invalidation)
+- [x] Integrations (SUPER_ADMIN): SMTP (host/port/secure/user/pass + **Send test email** via nodemailer, secret masked & never overwritten by blank) + WhatsApp wa.me mode; MessageLog for every send; WhatsApp debt-reminder from the customer ledger
+- [x] Notifications: in-app **bell** (unread badge, dropdown, mark-read) + Notifications centre + server sweep (low-stock / debt / payable, deduped) + **daily node-cron** at `low_stock_sweep_time`
+- [x] G8 Message template editor (WhatsApp receipt & reminder templates with {placeholder} chips) — SMS gateway interface deferred (ship-disabled, needs a provider)
+- [ ] G9 Display-currency switcher — deferred (display-only nicety; books already locked to PKR; lowest priority, revisit post-launch)
+- Verified: both apps tsc clean; 21/21 admin/integration assertions incl. backup export→wipe→restore with integrity all-green; web smoke (Users + all Settings tabs + bell, 0 console errors). Test residue cleaned.
 
 ## Phase 7 — Desktop
 - [ ] Electron runs app  ·  [ ] Windows installer built  ·  [ ] Tested on shop PC

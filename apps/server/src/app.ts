@@ -24,6 +24,11 @@ import expenseRoutes from "./routes/expenses.routes";
 import employeeRoutes from "./routes/employees.routes";
 import hrRoutes from "./routes/hr.routes";
 import reportRoutes from "./routes/reports.routes";
+import userRoutes from "./routes/users.routes";
+import notificationRoutes from "./routes/notifications.routes";
+import messageRoutes from "./routes/messages.routes";
+import auditRoutes from "./routes/audit.routes";
+import backupRoutes from "./routes/backup.routes";
 
 const app = express();
 
@@ -34,7 +39,7 @@ app.use(
     credentials: true,
   })
 );
-app.use(express.json({ limit: "2mb" }));
+app.use(express.json({ limit: "50mb" })); // large enough for backup/restore snapshots
 
 // Product images etc.
 app.use("/uploads", express.static(path.join(process.cwd(), process.env.UPLOAD_DIR ?? "uploads")));
@@ -66,9 +71,12 @@ app.use("/api/v1/ledger", ledgerRoutes);         // Phase 4 (customer & vendor s
 app.use("/api/v1/expenses", expenseRoutes);      // Phase 4
 app.use("/api/v1/employees", employeeRoutes);    // Phase 4 (employees & salaries)
 app.use("/api/v1/hr", hrRoutes);                 // Phase 4 (G6 departments/shifts/leaves/holidays)
-app.use("/api/v1/reports", reportRoutes);        // Phase 4 slice (integrity, cashbook, balance sheet); more in Phase 5
-// app.use("/api/v1/users", userRoutes);            // Phase 6
-// app.use("/api/v1/settings", settingRoutes);      // Phase 6
+app.use("/api/v1/reports", reportRoutes);        // Phase 4 slice + Phase 5 reports
+app.use("/api/v1/users", userRoutes);            // Phase 6 (users & roles)
+app.use("/api/v1/notifications", notificationRoutes); // Phase 6 (bell + reminders)
+app.use("/api/v1/messages", messageRoutes);      // Phase 6 (WhatsApp/email log)
+app.use("/api/v1/audit", auditRoutes);           // Phase 6 (audit log viewer)
+app.use("/api/v1/backup", backupRoutes);         // Phase 6 (backup / restore)
 
 // 404 + error handler
 app.use((_req, res) => res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "Route not found" } }));

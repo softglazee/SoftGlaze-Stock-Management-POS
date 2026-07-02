@@ -3,12 +3,13 @@ import { NavLink, Outlet, Navigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   Anvil, LayoutDashboard, ShoppingCart, Package, FolderTree, Truck, Users,
-  Receipt, Wallet, BarChart3, Settings, LogOut, Banknote, IdCard, Ruler, Tag, Boxes, Landmark, Menu, X,
+  Receipt, Wallet, BarChart3, Settings, LogOut, Banknote, IdCard, Ruler, Tag, Boxes, Landmark, UserCog, Menu, X,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../lib/api";
 import ThemeToggle from "./ThemeToggle";
 import Calculator from "./Calculator";
+import NotificationBell from "./NotificationBell";
 
 // Sidebar map — items appear as we build each phase.
 // `roles` hides links the user can't use (server still enforces).
@@ -29,7 +30,8 @@ const NAV = [
   { to: "/expenses", label: "Expenses", icon: Banknote, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "ACCOUNTANT"] },
   { to: "/employees", label: "Employees", icon: IdCard, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER"] },
   { to: "/reports", label: "Reports", icon: BarChart3, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "ACCOUNTANT"] },
-  { to: "/settings", label: "Settings", icon: Settings, roles: ["SUPER_ADMIN", "ADMIN"] },
+  { to: "/users", label: "Users & Roles", icon: UserCog, roles: ["SUPER_ADMIN", "ADMIN"] },
+  { to: "/settings", label: "Settings", icon: Settings, roles: ["SUPER_ADMIN", "ADMIN", "ACCOUNTANT"] },
 ];
 
 export default function Layout() {
@@ -72,6 +74,8 @@ export default function Layout() {
           </div>
         )}
         <span className="font-bold display truncate">{shopName}</span>
+        <div className="flex-1" />
+        <NotificationBell />
       </header>
       {navOpen && (
         <div className="lg:hidden fixed inset-0 z-40 bg-black/50" onClick={() => setNavOpen(false)} />
@@ -130,6 +134,7 @@ export default function Layout() {
               <p className="text-xs text-muted">{user?.role}</p>
             </div>
             <div className="flex gap-1.5">
+              <NotificationBell />
               <ThemeToggle />
               <button onClick={logout} className="btn btn-secondary !p-2" title="Logout" aria-label="Logout">
                 <LogOut size={17} />

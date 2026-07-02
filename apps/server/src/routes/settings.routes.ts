@@ -6,6 +6,7 @@ import { requirePermission } from "../middleware/permission";
 import { imageUpload, saveImage, saveFavicon, deleteImageFiles } from "../lib/upload";
 import { BUSINESS_PRESETS, getPreset } from "../data/business-presets";
 import { nextSku } from "../utils/sku";
+import { sendMail } from "../lib/mailer";
 
 const router = Router();
 
@@ -68,6 +69,17 @@ const PUBLIC_KEYS = [
   "invoice_prefix",
 ] as const;
 
+/** Integration settings (SUPER_ADMIN / settings.integrations). Kept out of EDITABLE_KEYS. */
+const INTEGRATION_KEYS = [
+  "smtp_host", "smtp_port", "smtp_secure", "smtp_user", "smtp_pass", "smtp_from_name",
+  "whatsapp_mode", "whatsapp_number", "sms_enabled",
+  // G8 message templates (WhatsApp text with {placeholders})
+  "tmpl_wa_receipt", "tmpl_wa_reminder", "tmpl_wa_purchase", "tmpl_wa_statement", "tmpl_wa_quotation",
+] as const;
+
+/** Secrets never returned to the client in plain text. */
+const SECRET_KEYS = new Set(["smtp_pass"]);
+
 /** GET /settings/public — unauthenticated shop identity for the login page & PDFs */
 router.get("/public", async (_req, res, next) => {
   try {
@@ -83,14 +95,72 @@ router.get("/public", async (_req, res, next) => {
 // Everything below requires a logged-in user
 router.use(requireAuth);
 
-/** GET /settings — key/value map (all logged-in users need shop name, currency…) */
+/** GET /settings — key/value map (secrets masked; a *_set flag says whether one is stored) */
 router.get("/", async (_req, res, next) => {
   try {
     const rows = await prisma.setting.findMany();
     const settings: Record<string, string> = {};
-    for (const row of rows) settings[row.key] = row.value;
+    for (const row of rows) {
+      if (SECRET_KEYS.has(row.key)) {
+        settings[`${row.key}_set`] = row.value ? "1" : "0";
+      } else {
+        settings[row.key] = row.value;
+      }
+    }
     res.json({ ok: true, data: { settings } });
   } catch (err) {
+    next(err);
+  }
+});
+
+/** GET /settings/integrations — integration config for SUPER_ADMIN (secrets masked) */
+router.get("/integrations", requirePermission("settings.integrations"), async (_req, res, next) => {
+  try {
+    const rows = await prisma.setting.findMany({ where: { key: { in: INTEGRATION_KEYS as unknown as string[] } } });
+    const settings: Record<string, string> = {};
+    for (const row of rows) settings[SECRET_KEYS.has(row.key) ? `${row.key}_set` : row.key] = SECRET_KEYS.has(row.key) ? (row.value ? "1" : "0") : row.value;
+    res.json({ ok: true, data: { settings } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** PATCH /settings/integrations — save SMTP / WhatsApp / template settings */
+router.patch("/integrations", requirePermission("settings.integrations"), async (req, res, next) => {
+  try {
+    const body = z.record(z.string()).parse(req.body);
+    const entries = Object.entries(body).filter(([key]) => (INTEGRATION_KEYS as readonly string[]).includes(key));
+    // A blank secret means "leave unchanged" — never overwrite a stored password with "".
+    const toSave = entries.filter(([key, value]) => !(SECRET_KEYS.has(key) && value === ""));
+    if (toSave.length === 0) return res.json({ ok: true, data: { message: "Nothing to update" } });
+    await prisma.$transaction(toSave.map(([key, value]) => prisma.setting.upsert({ where: { key }, create: { key, value }, update: { value } })));
+    await prisma.auditLog.create({ data: { userId: req.user!.id, action: "UPDATE_INTEGRATIONS", entity: "Setting", details: toSave.map(([k]) => k).join(",") } });
+    res.json({ ok: true, data: { message: "Integration settings saved" } });
+  } catch (err: any) {
+    if (err instanceof z.ZodError) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: "Settings must be text values" } });
+    next(err);
+  }
+});
+
+/** POST /settings/test-email — verify SMTP by sending a test message */
+router.post("/test-email", requirePermission("settings.integrations"), async (req, res, next) => {
+  try {
+    const to = z.string().email("Enter a valid email").parse(req.body?.to);
+    const shopRow = await prisma.setting.findUnique({ where: { key: "shop_name" } });
+    const shop = shopRow?.value || "SoftGlaze";
+    let status: "SENT" | "FAILED" = "SENT";
+    let error: string | null = null;
+    try {
+      await sendMail({ to, subject: `${shop} — SMTP test`, html: `<p>Your SoftGlaze email settings are working. 🎉</p><p>Sent from <b>${shop}</b>.</p>`, text: `Your SoftGlaze email settings are working. Sent from ${shop}.` });
+    } catch (e: any) {
+      status = "FAILED";
+      error = e?.message ?? "Send failed";
+    }
+    await prisma.messageLog.create({ data: { channel: "EMAIL", recipient: to, template: "TEST", status, error } });
+    if (status === "FAILED") return res.status(400).json({ ok: false, error: { code: "SEND_FAILED", message: error ?? "Could not send" } });
+    res.json({ ok: true, data: { message: `Test email sent to ${to}` } });
+  } catch (err: any) {
+    if (err instanceof z.ZodError) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: err.errors[0].message } });
     next(err);
   }
 });
