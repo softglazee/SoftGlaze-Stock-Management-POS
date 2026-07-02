@@ -136,6 +136,43 @@ export type Purchase = {
   payments?: PurchasePayment[];
 };
 
+export type SaleStatus = "DRAFT" | "COMPLETED" | "RETURNED" | "CANCELLED" | "QUOTATION";
+export type SaleItem = {
+  id: string;
+  productId: string;
+  product?: { id: string; name: string; sku: string; type: ProductType; unit?: { shortName: string } };
+  qty: string;
+  unitPrice: string;
+  unitCost?: string;
+  discount: string;
+  taxAmount: string;
+  total: string;
+};
+export type SalePayment = { id: string; amount: string; method?: { name: string } };
+export type Sale = {
+  id: string;
+  invoiceNo: string;
+  customerId: string | null;
+  customer?: { id: string; code: string; name: string; phone: string | null } | null;
+  user?: { id: string; name: string };
+  date: string;
+  status: SaleStatus;
+  subTotal: string;
+  discount: string;
+  tax: string;
+  otherCharges: string;
+  grandTotal: string;
+  paidAmount: string;
+  dueAmount: string;
+  totalCost?: string;
+  profit?: string;
+  notes: string | null;
+  isReturn: boolean;
+  returnOfId: string | null;
+  items: SaleItem[];
+  payments?: SalePayment[];
+};
+
 export type StockMoveType =
   | "PURCHASE"
   | "PURCHASE_RETURN"

@@ -12,6 +12,8 @@ import Products from "./pages/Products";
 import Brands from "./pages/Brands";
 import Purchases from "./pages/Purchases";
 import Stock from "./pages/Stock";
+import POS from "./pages/POS";
+import Sales from "./pages/Sales";
 import Customers from "./pages/Customers";
 import Vendors from "./pages/Vendors";
 
@@ -54,6 +56,15 @@ export default function App() {
           </Protected>
         }
       />
+      {/* POS is full-screen (outside the sidebar layout) */}
+      <Route
+        path="/pos"
+        element={
+          <Protected>
+            <POS />
+          </Protected>
+        }
+      />
 
       <Route
         element={
@@ -63,8 +74,7 @@ export default function App() {
         }
       >
         <Route path="/" element={<Dashboard />} />
-        <Route path="/pos" element={<ComingSoon title="POS / New Sale" phase="Phase 3" />} />
-        <Route path="/sales" element={<ComingSoon title="Sales" phase="Phase 3" />} />
+        <Route path="/sales" element={<Sales />} />
         <Route path="/products" element={<Products />} />
         <Route path="/brands" element={<Brands />} />
         <Route path="/categories" element={<Categories />} />

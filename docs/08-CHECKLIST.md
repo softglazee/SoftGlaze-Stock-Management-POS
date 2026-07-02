@@ -37,13 +37,15 @@ Tick things off as we build. Mirrors the phases in 01-BUILD-PLAN.md.
 - [ ] G3 Combo stock logic (selling a combo deducts component stock at snapshot costs) — lands in Phase 3 (needs the sale transaction; ComboItem model is ready)
 
 ## Phase 3 — POS
-- [ ] POS screen exactly per docs/11 A5 (quick-add customer, quick keys, split pay, success screen)
-- [ ] Cash / credit / split payments
-- [ ] Thermal receipt + A4 PDF invoice
-- [ ] Hold/resume  ·  [ ] Sales returns  ·  [ ] Quotations
-- [ ] G4 Warranty/guarantee fields + invoice print + report
-- [ ] G5 Camera barcode scanner + weighing scale (feature-flagged)
-- [ ] A6 Demo data pack (`db:seed:demo`) + P&L proof + docs/12 price-volatility acceptance test
+- [x] POS screen (full-screen, keyboard-first F2/F6/F10, product search+add, customer picker + inline quick-add, cart with qty/price/discount, success screen) — quick-keys/category-tiles/calculator deferred to a later polish
+- [x] Cash / credit (udhaar) / split payments + credit-limit block with permission override
+- [x] Thermal 80mm receipt + A4 invoice via print window (Save-as-PDF) — true server-side pdfmake PDF deferred to Phase 5
+- [x] Hold/resume (DRAFT + Held tray)  ·  [x] Sales returns (reverse at snapshot, stock back, receivable adjusted)  ·  [x] Quotations (QUOTATION + Quotes tray)
+- [x] G3 combo stock logic — selling a COMBO deducts component stock at snapshot cost (verified −2 per combo)
+- [x] Price-volatility acceptance test PASSED (sell @600/cost500 → edit to 850/700 → sell again → day profit exactly 250; prior sale unchanged)
+- [ ] G4 Warranty/guarantee fields + invoice print + report — deferred (needs schema fields)
+- [ ] G5 Camera barcode scanner + weighing scale (feature-flagged) — deferred (hardware-dependent)
+- [ ] A6 Demo data pack (`db:seed:demo`) + full P&L proof — deferred (best run after Phase 4–5 money/reports exist)
 
 ## Phase 4 — Money
 - [ ] Customer receipts  ·  [ ] Vendor payments

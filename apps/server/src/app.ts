@@ -16,6 +16,7 @@ import importRoutes from "./routes/import.routes";
 import purchaseRoutes from "./routes/purchases.routes";
 import stockRoutes from "./routes/stock.routes";
 import paymentMethodRoutes from "./routes/payment-methods.routes";
+import saleRoutes from "./routes/sales.routes";
 
 const app = express();
 
@@ -51,7 +52,7 @@ app.use("/api/v1/import", importRoutes);          // Phase 1 (A3 + G7)
 app.use("/api/v1/purchases", purchaseRoutes);    // Phase 2
 app.use("/api/v1/stock", stockRoutes);           // Phase 2
 app.use("/api/v1/payment-methods", paymentMethodRoutes); // Phase 2 (read-only; CRUD in Phase 4)
-// app.use("/api/v1/sales", saleRoutes);            // Phase 3
+app.use("/api/v1/sales", saleRoutes);            // Phase 3
 // app.use("/api/v1/payments", paymentRoutes);      // Phase 4
 // app.use("/api/v1/expenses", expenseRoutes);      // Phase 4
 // app.use("/api/v1/reports", reportRoutes);        // Phase 5

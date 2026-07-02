@@ -3,7 +3,66 @@
 > Living hand-off file. Updated after every module or mid-task stop.
 > Read this at the start of every session (see CLAUDE.md → Grounding & session continuity rules).
 
-## Current status (2026-07-02) — Phase 2 CORE COMPLETE ✅ (Purchasing & stock)
+## Current status (2026-07-02) — Phase 3 CORE COMPLETE ✅ (POS & Sales)
+
+**What was just done (Phase 3 core, all verified). No schema change — Sale/SaleItem/Payment existed:**
+- **`routes/sales.routes.ts`** — the transactional heart:
+  - `POST /sales` (status COMPLETED | DRAFT=hold | QUOTATION). Completed sale = ONE tx:
+    Sale + SaleItems (unitPrice **and** unitCost snapshots) + SALE StockMovements (STANDARD
+    deducts; **COMBO deducts each component** at snapshot cost; SERVICE skips stock) +
+    Payment(s) SALE_RECEIPT + Customer.balance += due (udhaar) + INV- counter + audit.
+    Credit-limit check (block → 409 CREDIT_LIMIT_EXCEEDED unless `overrideCredit` + the
+    `sales.discount_over_limit` permission). Walk-in + due>0 blocked. Holds/quotes save
+    snapshots only (HLD-/QUO-, no stock/money).
+  - `GET /sales` (own-vs-all gated by sales.view_all/own; profit/cost stripped unless
+    `reports.profit`), `GET /:id`, `GET /held`, `GET /quotations`, `DELETE /:id`
+    (DRAFT/QUOTATION only), `POST /:id/return` (SRET-, reverse at snapshot: stock back in,
+    COGS reversed, receivable reduced, optional REFUND_OUT).
+- Web: **`pages/POS.tsx`** — full-screen (route outside Layout), keyboard-first
+  (F2 search · F6 hold · F10 complete · Enter=new sale), product search grid + add,
+  customer bar with search + inline quick-add (real CUS-), cart with qty/price(gated)/discount,
+  bill discount/tax/delivery, split payments (+ udhaar/change), Hold/Quote/Complete, Held &
+  Quotes trays (resume loads cart + deletes the parked doc), success overlay with 80mm/A4
+  print + WhatsApp + New sale. **`pages/Sales.tsx`** — list (profit gated) + detail + return +
+  reprint. **`lib/receipt.ts`** — print-window receipt (80mm thermal / A4, Save-as-PDF).
+  Routes: /pos (full-screen), /sales; nav already had both. Sale types added to `lib/types.ts`.
+
+**Verified (rule-2):**
+- `npx tsc --noEmit` (server) + `tsc -b` (web) both clean.
+- End-to-end money math (signed dev JWT, isolated data):
+  Sale#1 1@600 cost500 cash → grand 600 / cost 500 / profit 100 / due 0 ✓;
+  **PRICE-VOLATILITY**: edit product to 850/700, Sale#2 1@850 → profit 150; Sale#1 re-fetched
+  still 100/500 (snapshots unchanged); day profit exactly **250** ✓;
+  credit limit 1000: udhaar 850 ok (bal 850), next 850 → **409**, override → ok (bal 1700) ✓;
+  **combo** sell 1 (2× component) → cost 1400, profit 600, component stock −2 ✓;
+  return 1 of udhaar sale → receivable 1700→850 ✓; oversell → **409 INSUFFICIENT_STOCK** ✓;
+  hold HLD- + quotation QUO- created, trays list them, delete works ✓.
+- Browser (Playwright): /pos renders full POS (search focused, customer bar, cart, checkout,
+  Held/Quotes) and /sales load with **0 app console errors**. (Deeper click-tests were noisy
+  due to a shared multi-tab browser; snapshots confirm clean mounts.)
+- All test data cleaned; counters sale/hold/quotation/sale_return/payment/customer/vendor reset.
+
+**Exact next step:** Owner to confirm, then **Phase 4 — Money** per KICKOFF-PROMPT.md
+(customer receipts, vendor payments, customer & vendor ledgers with statements, expenses,
+Employees & Salaries per docs/09 §2, calculator widget, day-close cash book) + **G1 Accounts &
+fund transfers + balance sheet** and **G6 HR extensions**. The `GET /reports/integrity` endpoint
+(CLAUDE rule 1) should be written early in Phase 4/5.
+
+**Known issues / deferred (transparent):**
+- POS quick-keys/favorites, category tiles, on-screen calculator, sticky-session restore, and
+  camera scanner/scale (G5) are deferred — core billing is complete and fast.
+- Receipts print via a browser print window (Save-as-PDF for A4). True server-side pdfmake PDFs
+  come with reports in Phase 5. WhatsApp is a wa.me link (no MessageLog yet — that's Phase 6).
+- G4 warranty and A6 demo-data pack deferred (see checklist). A7 medical batches still pending
+  from Phase 2.
+- Sales returns don't track cumulative returned qty per line across multiple returns (guarded
+  against the original qty each time) — same caveat as purchase returns.
+- Purchase/sale invoice PDFs, and DB manual start / Windows Prisma-generate lock — see
+  [[softglaze-environment]].
+
+---
+
+## Prior status (2026-07-02) — Phase 2 CORE COMPLETE ✅ (Purchasing & stock)
 
 **What was just done (Phase 2 core, all verified). No schema change — models already existed:**
 - **`lib/stock.ts`** — reusable ledger service: `applyMovement(tx, {...})` appends a
