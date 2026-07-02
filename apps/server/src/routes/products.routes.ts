@@ -13,20 +13,34 @@ const WRITE_ROLES = ["SUPER_ADMIN", "ADMIN", "MANAGER"] as const;
 
 const money = z.coerce.number().min(0, "Cannot be negative");
 const qty = z.coerce.number().min(0, "Cannot be negative");
+const dim = z.coerce.number().min(0).nullable().optional(); // dimensions/weight (G10)
+
+const comboItemSchema = z.object({
+  componentProductId: z.string().min(1),
+  qty: z.coerce.number().positive("Combo quantities must be greater than 0"),
+});
 
 const createSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(150),
   sku: z.string().trim().max(30).optional(), // omitted → auto CEM-0001
   barcode: z.string().trim().max(60).nullable().optional(),
   description: z.string().trim().max(1000).nullable().optional(),
+  type: z.enum(["STANDARD", "SERVICE", "COMBO"]).default("STANDARD"), // G3
   categoryId: z.string().min(1, "Category is required"),
   unitId: z.string().min(1, "Unit is required"),
+  brandId: z.string().nullable().optional(), // G2
   costPrice: money.default(0),
   salePrice: money.default(0),
   wholesalePrice: money.nullable().optional(),
   taxPercent: z.coerce.number().min(0).max(100).default(0),
   minStockLevel: qty.default(0),
-  openingStock: qty.default(0), // creates an OPENING stock movement
+  // Dimensions (G10)
+  length: dim,
+  width: dim,
+  height: dim,
+  weight: dim,
+  openingStock: qty.default(0), // creates an OPENING stock movement (STANDARD only)
+  comboItems: z.array(comboItemSchema).max(50).optional(), // G3 combo components
 });
 
 const updateSchema = createSchema.omit({ openingStock: true }).partial().extend({
@@ -36,8 +50,32 @@ const updateSchema = createSchema.omit({ openingStock: true }).partial().extend(
 const productInclude = {
   category: { select: { id: true, name: true } },
   unit: { select: { id: true, name: true, shortName: true } },
+  brand: { select: { id: true, name: true } },
   images: { orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }] },
+  comboItems: {
+    include: {
+      componentProduct: { select: { id: true, name: true, sku: true, unit: { select: { shortName: true } } } },
+    },
+  },
 } satisfies Prisma.ProductInclude;
+
+/**
+ * Validates combo component references (exist, no duplicates, no nested combos,
+ * not self). Returns a ready error response payload or null when valid.
+ */
+async function validateComboItems(
+  items: { componentProductId: string; qty: number }[],
+  selfId?: string
+): Promise<{ status: number; code: string; message: string } | null> {
+  if (items.length === 0) return { status: 400, code: "VALIDATION", message: "A combo needs at least one component product" };
+  const ids = items.map((c) => c.componentProductId);
+  if (new Set(ids).size !== ids.length) return { status: 400, code: "VALIDATION", message: "A combo cannot list the same product twice" };
+  if (selfId && ids.includes(selfId)) return { status: 400, code: "VALIDATION", message: "A combo cannot contain itself" };
+  const comps = await prisma.product.findMany({ where: { id: { in: ids } }, select: { id: true, type: true } });
+  if (comps.length !== ids.length) return { status: 404, code: "NOT_FOUND", message: "One of the combo components was not found" };
+  if (comps.some((c) => c.type === "COMBO")) return { status: 400, code: "VALIDATION", message: "A combo cannot contain another combo" };
+  return null;
+}
 
 /** GET /products?page&limit&search&categoryId&status=active|inactive|low|out */
 router.get("/", async (req, res, next) => {
@@ -46,6 +84,8 @@ router.get("/", async (req, res, next) => {
     const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
     const search = String(req.query.search ?? "").trim();
     const categoryId = String(req.query.categoryId ?? "");
+    const brandId = String(req.query.brandId ?? "");
+    const type = String(req.query.type ?? "");
     const status = String(req.query.status ?? "");
 
     const where: Prisma.ProductWhereInput = {};
@@ -57,6 +97,8 @@ router.get("/", async (req, res, next) => {
       ];
     }
     if (categoryId) where.categoryId = categoryId;
+    if (brandId) where.brandId = brandId;
+    if (type === "STANDARD" || type === "SERVICE" || type === "COMBO") where.type = type;
     if (status === "active") where.isActive = true;
     if (status === "inactive") where.isActive = false;
     if (status === "out") where.stockQty = { lte: 0 };
@@ -159,6 +201,22 @@ router.post("/", requireRole(...WRITE_ROLES), async (req, res, next) => {
     if (!unit) {
       return res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "Unit not found" } });
     }
+    if (body.brandId) {
+      const brand = await prisma.brand.findUnique({ where: { id: body.brandId } });
+      if (!brand) {
+        return res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "Brand not found" } });
+      }
+    }
+
+    // SERVICE + COMBO products don't track their own stock (rule 4 / G3).
+    const isCombo = body.type === "COMBO";
+    const isService = body.type === "SERVICE";
+    const comboItems = isCombo ? body.comboItems ?? [] : [];
+    if (isCombo) {
+      const err = await validateComboItems(comboItems);
+      if (err) return res.status(err.status).json({ ok: false, error: { code: err.code, message: err.message } });
+    }
+    const openingStock = isService || isCombo ? 0 : body.openingStock;
 
     const product = await prisma.$transaction(async (tx) => {
       const sku = body.sku || (await nextSku(tx, category.name));
@@ -168,27 +226,38 @@ router.post("/", requireRole(...WRITE_ROLES), async (req, res, next) => {
           name: body.name,
           barcode: body.barcode || null,
           description: body.description || null,
+          type: body.type,
           categoryId: body.categoryId,
           unitId: body.unitId,
+          brandId: body.brandId ?? null,
           costPrice: body.costPrice,
           salePrice: body.salePrice,
           wholesalePrice: body.wholesalePrice ?? null,
           taxPercent: body.taxPercent,
           minStockLevel: body.minStockLevel,
-          stockQty: body.openingStock,
+          length: body.length ?? null,
+          width: body.width ?? null,
+          height: body.height ?? null,
+          weight: body.weight ?? null,
+          stockQty: openingStock,
         },
       });
-      if (body.openingStock > 0) {
+      if (openingStock > 0) {
         await tx.stockMovement.create({
           data: {
             productId: created.id,
             type: "OPENING",
-            qty: body.openingStock,
+            qty: openingStock,
             unitCost: body.costPrice,
             refType: "OPENING",
-            balance: body.openingStock,
+            balance: openingStock,
             notes: "Opening stock at product creation",
           },
+        });
+      }
+      if (isCombo && comboItems.length > 0) {
+        await tx.comboItem.createMany({
+          data: comboItems.map((c) => ({ comboProductId: created.id, componentProductId: c.componentProductId, qty: c.qty })),
         });
       }
       await tx.auditLog.create({
@@ -230,26 +299,57 @@ router.patch("/:id", requireRole(...WRITE_ROLES), async (req, res, next) => {
         return res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "Unit not found" } });
       }
     }
-    const product = await prisma.product.update({
-      where: { id: existing.id },
-      data: {
-        name: body.name,
-        sku: body.sku,
-        barcode: body.barcode === undefined ? undefined : body.barcode || null,
-        description: body.description === undefined ? undefined : body.description || null,
-        categoryId: body.categoryId,
-        unitId: body.unitId,
-        costPrice: body.costPrice,
-        salePrice: body.salePrice,
-        wholesalePrice: body.wholesalePrice === undefined ? undefined : body.wholesalePrice,
-        taxPercent: body.taxPercent,
-        minStockLevel: body.minStockLevel,
-        isActive: body.isActive,
-      },
-      include: productInclude,
-    });
-    await prisma.auditLog.create({
-      data: { userId: req.user!.id, action: "UPDATE_PRODUCT", entity: "Product", entityId: product.id, details: `${product.sku} ${product.name}` },
+    if (body.brandId) {
+      const brand = await prisma.brand.findUnique({ where: { id: body.brandId } });
+      if (!brand) {
+        return res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "Brand not found" } });
+      }
+    }
+    const finalType = body.type ?? existing.type;
+    let replaceCombo = false;
+    if (finalType === "COMBO" && body.comboItems !== undefined) {
+      const cErr = await validateComboItems(body.comboItems, existing.id);
+      if (cErr) return res.status(cErr.status).json({ ok: false, error: { code: cErr.code, message: cErr.message } });
+      replaceCombo = true;
+    }
+
+    const product = await prisma.$transaction(async (tx) => {
+      const updated = await tx.product.update({
+        where: { id: existing.id },
+        data: {
+          name: body.name,
+          sku: body.sku,
+          barcode: body.barcode === undefined ? undefined : body.barcode || null,
+          description: body.description === undefined ? undefined : body.description || null,
+          type: body.type,
+          categoryId: body.categoryId,
+          unitId: body.unitId,
+          brandId: body.brandId === undefined ? undefined : body.brandId || null,
+          costPrice: body.costPrice,
+          salePrice: body.salePrice,
+          wholesalePrice: body.wholesalePrice === undefined ? undefined : body.wholesalePrice,
+          taxPercent: body.taxPercent,
+          minStockLevel: body.minStockLevel,
+          length: body.length === undefined ? undefined : body.length,
+          width: body.width === undefined ? undefined : body.width,
+          height: body.height === undefined ? undefined : body.height,
+          weight: body.weight === undefined ? undefined : body.weight,
+          isActive: body.isActive,
+        },
+      });
+      // Combo membership: clear when no longer a combo, replace when new list given
+      if (finalType !== "COMBO") {
+        await tx.comboItem.deleteMany({ where: { comboProductId: existing.id } });
+      } else if (replaceCombo) {
+        await tx.comboItem.deleteMany({ where: { comboProductId: existing.id } });
+        await tx.comboItem.createMany({
+          data: body.comboItems!.map((c) => ({ comboProductId: existing.id, componentProductId: c.componentProductId, qty: c.qty })),
+        });
+      }
+      await tx.auditLog.create({
+        data: { userId: req.user!.id, action: "UPDATE_PRODUCT", entity: "Product", entityId: updated.id, details: `${updated.sku} ${updated.name}` },
+      });
+      return tx.product.findUnique({ where: { id: updated.id }, include: productInclude });
     });
     res.json({ ok: true, data: { product } });
   } catch (err: any) {
@@ -270,7 +370,7 @@ router.delete("/:id", requireRole(...WRITE_ROLES), async (req, res, next) => {
       where: { id: req.params.id },
       include: {
         images: true,
-        _count: { select: { saleItems: true, purchaseItems: true, stockMoves: true, adjustmentItems: true } },
+        _count: { select: { saleItems: true, purchaseItems: true, stockMoves: true, adjustmentItems: true, usedInCombos: true } },
       },
     });
     if (!product) {
@@ -280,7 +380,8 @@ router.delete("/:id", requireRole(...WRITE_ROLES), async (req, res, next) => {
       product._count.saleItems > 0 ||
       product._count.purchaseItems > 0 ||
       product._count.stockMoves > 0 ||
-      product._count.adjustmentItems > 0;
+      product._count.adjustmentItems > 0 ||
+      product._count.usedInCombos > 0;
 
     if (referenced) {
       await prisma.product.update({ where: { id: product.id }, data: { isActive: false } });

@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
+import Branding from "./components/Branding";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -8,6 +9,7 @@ import Onboarding from "./pages/Onboarding";
 import Units from "./pages/Units";
 import Categories from "./pages/Categories";
 import Products from "./pages/Products";
+import Brands from "./pages/Brands";
 import Customers from "./pages/Customers";
 import Vendors from "./pages/Vendors";
 
@@ -37,6 +39,8 @@ function ComingSoon({ title, phase }: { title: string; phase: string }) {
 
 export default function App() {
   return (
+    <>
+    <Branding />
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
@@ -60,6 +64,7 @@ export default function App() {
         <Route path="/pos" element={<ComingSoon title="POS / New Sale" phase="Phase 3" />} />
         <Route path="/sales" element={<ComingSoon title="Sales" phase="Phase 3" />} />
         <Route path="/products" element={<Products />} />
+        <Route path="/brands" element={<Brands />} />
         <Route path="/categories" element={<Categories />} />
         <Route path="/units" element={<Units />} />
         <Route path="/purchases" element={<ComingSoon title="Purchases" phase="Phase 2" />} />
@@ -74,5 +79,6 @@ export default function App() {
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </>
   );
 }

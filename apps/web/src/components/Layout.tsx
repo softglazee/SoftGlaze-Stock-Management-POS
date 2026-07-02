@@ -3,7 +3,7 @@ import { NavLink, Outlet, Navigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   Anvil, LayoutDashboard, ShoppingCart, Package, FolderTree, Truck, Users,
-  Receipt, Wallet, BarChart3, Settings, LogOut, Banknote, IdCard, Ruler, Menu, X,
+  Receipt, Wallet, BarChart3, Settings, LogOut, Banknote, IdCard, Ruler, Tag, Menu, X,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../lib/api";
@@ -17,6 +17,7 @@ const NAV = [
   { to: "/sales", label: "Sales", icon: Receipt, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "CASHIER", "ACCOUNTANT"] },
   { to: "/products", label: "Products", icon: Package, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "CASHIER", "ACCOUNTANT"] },
   { to: "/categories", label: "Categories", icon: FolderTree, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER"] },
+  { to: "/brands", label: "Brands", icon: Tag, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER"] },
   { to: "/units", label: "Units", icon: Ruler, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER"] },
   { to: "/purchases", label: "Purchases", icon: Truck, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "ACCOUNTANT"] },
   { to: "/customers", label: "Customers", icon: Users, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "CASHIER", "ACCOUNTANT"] },
@@ -46,6 +47,9 @@ export default function Layout() {
     return <Navigate to="/onboarding" replace />;
   }
 
+  const shopName = settingsData?.settings.shop_name || "SoftGlaze";
+  const shopLogo = settingsData?.settings.shop_logo_thumb || settingsData?.settings.shop_logo;
+
   return (
     <div className="min-h-screen flex">
       {/* Mobile top bar */}
@@ -57,10 +61,14 @@ export default function Layout() {
         >
           <Menu size={18} />
         </button>
-        <div className="w-7 h-7 rounded-md bg-accent text-accent-ink flex items-center justify-center">
-          <Anvil size={16} />
-        </div>
-        <span className="font-bold display">SoftGlaze</span>
+        {shopLogo ? (
+          <img src={shopLogo} alt="" className="w-7 h-7 rounded-md object-cover border border-edge" />
+        ) : (
+          <div className="w-7 h-7 rounded-md bg-accent text-accent-ink flex items-center justify-center">
+            <Anvil size={16} />
+          </div>
+        )}
+        <span className="font-bold display truncate">{shopName}</span>
       </header>
       {navOpen && (
         <div className="lg:hidden fixed inset-0 z-40 bg-black/50" onClick={() => setNavOpen(false)} />
@@ -74,10 +82,14 @@ export default function Layout() {
           lg:static lg:translate-x-0`}
       >
         <div className="flex items-center gap-2.5 px-4 h-14 border-b border-edge">
-          <div className="w-8 h-8 rounded-md bg-accent text-accent-ink flex items-center justify-center">
-            <Anvil size={18} />
-          </div>
-          <span className="font-bold display flex-1">SoftGlaze</span>
+          {shopLogo ? (
+            <img src={shopLogo} alt="" className="w-8 h-8 rounded-md object-cover border border-edge" />
+          ) : (
+            <div className="w-8 h-8 rounded-md bg-accent text-accent-ink flex items-center justify-center">
+              <Anvil size={18} />
+            </div>
+          )}
+          <span className="font-bold display flex-1 truncate">{shopName}</span>
           <button
             className="lg:hidden text-muted hover:text-ink"
             onClick={() => setNavOpen(false)}

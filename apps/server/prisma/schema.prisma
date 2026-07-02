@@ -42,6 +42,29 @@ model User {
   salariesPaid SalaryPayment[]
 }
 
+// ─────────────────────────── PERMISSIONS (A2) ───────────────────────────
+// Data-driven RBAC. `requireRole` still guards routes today; `requirePermission`
+// reads these tables so SUPER_ADMIN can retune the matrix (full editor UI in Phase 6).
+// SUPER_ADMIN implicitly holds ALL permissions and is never stored/editable here.
+
+model Permission {
+  key   String @id            // "products.create"
+  group String                // "Products" (for grouping in the matrix UI)
+  label String                // "Create products"
+  sort  Int    @default(0)    // display order within a group
+
+  roles RolePermission[]
+}
+
+model RolePermission {
+  role          Role
+  permissionKey String
+  permission    Permission @relation(fields: [permissionKey], references: [key], onDelete: Cascade)
+
+  @@id([role, permissionKey])
+  @@index([permissionKey])
+}
+
 // ─────────────────────────── MASTER DATA ───────────────────────────
 
 model Category {
@@ -70,22 +93,48 @@ model Unit {
   products   Product[]
 }
 
+// STANDARD = tracks stock; SERVICE = no stock (delivery/labour/fees);
+// COMBO = bundle whose sale deducts component stock (logic lands in Phase 2).
+enum ProductType {
+  STANDARD
+  SERVICE
+  COMBO
+}
+
+model Brand {
+  id        String    @id @default(cuid())
+  name      String    @unique          // Lucky, Ittehad, Master, Diamond...
+  image     String?
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+
+  products  Product[]
+}
+
 model Product {
   id             String   @id @default(cuid())
   sku            String   @unique            // auto-generated e.g. IRN-0001
   barcode        String?  @unique
   name           String                       // "Sariya 12mm Grade-60", "Lucky Cement 50kg"
   description    String?
+  type           ProductType @default(STANDARD)
   categoryId     String
   category       Category @relation(fields: [categoryId], references: [id])
   unitId         String
   unit           Unit     @relation(fields: [unitId], references: [id])
+  brandId        String?
+  brand          Brand?   @relation(fields: [brandId], references: [id])
   costPrice      Decimal  @default(0) @db.Decimal(18, 2) // weighted avg, auto-updated on purchase
   salePrice      Decimal  @default(0) @db.Decimal(18, 2)
   wholesalePrice Decimal? @db.Decimal(18, 2)
   taxPercent     Decimal  @default(0) @db.Decimal(5, 2)
   stockQty       Decimal  @default(0) @db.Decimal(18, 3)  // cached; ledger is source of truth
   minStockLevel  Decimal  @default(0) @db.Decimal(18, 3)  // low-stock alert threshold
+  // Optional physical dimensions (G10) — shown on detail, optional on invoice
+  length         Decimal? @db.Decimal(12, 3)
+  width          Decimal? @db.Decimal(12, 3)
+  height         Decimal? @db.Decimal(12, 3)
+  weight         Decimal? @db.Decimal(12, 3)
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -95,9 +144,25 @@ model Product {
   purchaseItems  PurchaseItem[]
   stockMoves     StockMovement[]
   adjustmentItems StockAdjustmentItem[]
+  comboItems     ComboItem[] @relation("ComboParent")     // components of THIS combo
+  usedInCombos   ComboItem[] @relation("ComboComponent")  // combos that include this product
 
   @@index([name])
   @@index([categoryId])
+  @@index([brandId])
+}
+
+// A component line of a COMBO product. Selling the combo deducts each
+// component's stock at its snapshot cost (Phase 2 sale logic).
+model ComboItem {
+  id                 String  @id @default(cuid())
+  comboProductId     String
+  comboProduct       Product @relation("ComboParent", fields: [comboProductId], references: [id], onDelete: Cascade)
+  componentProductId String
+  componentProduct   Product @relation("ComboComponent", fields: [componentProductId], references: [id])
+  qty                Decimal @db.Decimal(18, 3)
+
+  @@unique([comboProductId, componentProductId])
 }
 
 model ProductImage {

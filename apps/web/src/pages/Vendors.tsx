@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
-import { Plus, Pencil, Trash2, Truck } from "lucide-react";
+import { Plus, Pencil, Trash2, Truck, Upload } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import { Vendor, Paged } from "../lib/types";
 import { num, fmtMoney } from "../lib/format";
+import { useAuth } from "../context/AuthContext";
 import {
   PageHeader,
   Modal,
@@ -15,6 +16,7 @@ import {
   Pagination,
   useToast,
 } from "../components/ui";
+import ImportWizard from "../components/ImportWizard";
 
 type FormState = {
   name: string;
@@ -29,11 +31,13 @@ const emptyForm: FormState = { name: "", phone: "", address: "", taxNumber: "", 
 export default function Vendors() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { can } = useAuth();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("active");
   const [page, setPage] = useState(1);
   const [editing, setEditing] = useState<Vendor | "new" | null>(null);
   const [deleting, setDeleting] = useState<Vendor | null>(null);
+  const [importing, setImporting] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [error, setError] = useState<string | null>(null);
 
@@ -116,9 +120,16 @@ export default function Vendors() {
         title="Vendors"
         sub={`Suppliers you buy from — including on udhaar. Total payable: ${fmtMoney(data?.totalPayable ?? 0)}`}
         actions={
-          <button className="btn btn-secondary" onClick={openNew}>
-            <Plus size={16} /> Add vendor
-          </button>
+          <>
+            {can("vendors.create") && (
+              <button className="btn btn-secondary" onClick={() => setImporting(true)}>
+                <Upload size={16} /> Import
+              </button>
+            )}
+            <button className="btn btn-secondary" onClick={openNew}>
+              <Plus size={16} /> Add vendor
+            </button>
+          </>
         }
       />
 
@@ -304,6 +315,8 @@ export default function Vendors() {
         onConfirm={() => deleting && remove.mutate(deleting.id)}
         onClose={() => setDeleting(null)}
       />
+
+      <ImportWizard entity="vendors" open={importing} onClose={() => setImporting(false)} onDone={() => qc.invalidateQueries({ queryKey: ["vendors"] })} />
     </div>
   );
 }

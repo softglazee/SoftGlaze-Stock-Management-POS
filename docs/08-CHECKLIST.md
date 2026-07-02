@@ -18,15 +18,15 @@ Tick things off as we build. Mirrors the phases in 01-BUILD-PLAN.md.
 - [x] Products CRUD + image upload (webp + thumbnail) + SKU auto (CEM-0001 style) + opening stock via ledger
 - [x] Customers CRUD  ·  [x] Vendors CRUD (codes CUS-/VEN-, opening balances, delete-protection when balance ≠ 0)
 
-### Phase 1 upgrades (docs/11 A + docs/12 G — added 2026-07-02)
-- [ ] A1 Shop Profile foundation (settings service + logo pipeline; full UI in Phase 6)
-- [ ] A2 Permission keys + `requirePermission` middleware (matrix editor UI in Phase 6)
-- [ ] A3 Bulk product import wizard (CSV/Excel/XML/TXT/paste, mapping templates, dry-run) + product export
-- [ ] A4 `<ImageDropzone>` global drag-drop uploader (products/categories/employees/logo)
-- [ ] G2 Brands (model + product filter + import column)
-- [ ] G3 Product types STANDARD / SERVICE / COMBO (combo stock logic lands in Phase 2)
-- [ ] G7 Import wizard targets: Customers + Vendors (opening balances as proper entries)
-- [ ] G10 Product dimensions fields · favicon + page title in branding
+### Phase 1 upgrades (docs/11 A + docs/12 G — added 2026-07-02, completed 2026-07-02)
+- [x] A1 Shop Profile foundation (expanded settings keys + `GET /settings/public` + logo/favicon pipeline; name/logo wired into sidebar, login, tab title. Full UI in Phase 6)
+- [x] A2 Permission keys + `requirePermission` middleware (40-key catalog, RolePermission defaults seeded, in-memory cache, matrix API `GET/PUT /permissions/matrix`; matrix editor UI in Phase 6)
+- [x] A3 Bulk product import wizard (CSV/Excel/XML/TXT/paste, auto-mapping, saved templates, dry-run report, chunked commit with per-row salvage) + product export (CSV/Excel)
+- [x] A4 `<ImageDropzone>` global drag-drop uploader (drag/click/paste + client compression; used in products, categories, brands)
+- [x] G2 Brands (model + CRUD route + page + product filter/field + import column with auto-create)
+- [x] G3 Product types STANDARD / SERVICE / COMBO (+ ComboItem model; SERVICE/COMBO skip stock; combo stock logic lands in Phase 2)
+- [x] G7 Import wizard targets: Customers + Vendors (dedupe by phone, opening balances as proper entries)
+- [x] G10 Product dimensions (L×W×H + weight) fields · favicon + page title in branding
 
 ## Phase 2 — Purchasing & stock
 - [ ] Purchase entry → stock in + weighted avg cost

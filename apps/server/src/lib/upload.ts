@@ -43,6 +43,18 @@ export async function saveImage(buffer: Buffer, folder: string) {
   };
 }
 
+/** Saves a 64×64 transparent PNG favicon; returns its web path. */
+export async function saveFavicon(buffer: Buffer) {
+  const dir = path.join(UPLOAD_ROOT, "branding");
+  await fs.mkdir(dir, { recursive: true });
+  const name = crypto.randomBytes(6).toString("hex");
+  await sharp(buffer)
+    .resize(64, 64, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .png()
+    .toFile(path.join(dir, `${name}.png`));
+  return `/uploads/branding/${name}.png`;
+}
+
 /** Best-effort removal of stored image files (never throws) */
 export async function deleteImageFiles(...relPaths: (string | null | undefined)[]) {
   for (const rel of relPaths) {

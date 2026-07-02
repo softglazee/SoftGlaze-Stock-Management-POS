@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Pencil, Trash2, FolderTree, CornerDownRight, ImagePlus } from "lucide-react";
+import { Plus, Pencil, Trash2, FolderTree, CornerDownRight } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import { Category } from "../lib/types";
 import {
@@ -13,6 +13,7 @@ import {
   Badge,
   useToast,
 } from "../components/ui";
+import ImageDropzone from "../components/ImageDropzone";
 
 type FormState = { name: string; parentId: string };
 const emptyForm: FormState = { name: "", parentId: "" };
@@ -24,7 +25,7 @@ export default function Categories() {
   const [editing, setEditing] = useState<Category | "new" | null>(null);
   const [deleting, setDeleting] = useState<Category | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
-  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
@@ -62,9 +63,9 @@ export default function Categories() {
       const result = payload.id
         ? await api<{ category: Category }>(`/categories/${payload.id}`, { method: "PATCH", body: payload.body })
         : await api<{ category: Category }>("/categories", { method: "POST", body: payload.body });
-      if (imageFile) {
+      if (imageFiles.length > 0) {
         const fd = new FormData();
-        fd.append("image", imageFile);
+        fd.append("image", imageFiles[0]);
         await api(`/categories/${result.category.id}/image`, { method: "POST", body: fd, isForm: true });
       }
       return result;
@@ -92,13 +93,13 @@ export default function Categories() {
 
   function openNew() {
     setForm(emptyForm);
-    setImageFile(null);
+    setImageFiles([]);
     setError(null);
     setEditing("new");
   }
   function openEdit(cat: Category) {
     setForm({ name: cat.name, parentId: cat.parentId ?? "" });
-    setImageFile(null);
+    setImageFiles([]);
     setError(null);
     setEditing(cat);
   }
@@ -238,16 +239,14 @@ export default function Categories() {
           </div>
           <div>
             <label className="label">Image (optional)</label>
-            <label className="btn btn-secondary cursor-pointer">
-              <ImagePlus size={15} />
-              {imageFile ? imageFile.name : "Choose image"}
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => setImageFile(e.target.files?.[0] ?? null)}
-              />
-            </label>
+            <ImageDropzone
+              saved={editing !== "new" && (editing as Category)?.image ? [{ id: "img", url: (editing as Category).image!, isPrimary: true }] : []}
+              files={imageFiles}
+              onFilesChange={setImageFiles}
+              max={1}
+              multiple={false}
+              hint="Drag, click or paste one image for this category."
+            />
           </div>
           {error && <p className="text-danger text-sm">{error}</p>}
           <div className="flex justify-end gap-2 pt-1">

@@ -13,11 +13,17 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [needsSetup, setNeedsSetup] = useState(false);
+  const [shop, setShop] = useState<{ name: string; logo?: string }>({ name: "SoftGlaze" });
 
   // If no user exists yet (fresh install), send owner to Register
   useEffect(() => {
     api<{ needsSetup: boolean }>("/auth/setup-status")
       .then((d) => setNeedsSetup(d.needsSetup))
+      .catch(() => {});
+    api<{ settings: Record<string, string> }>("/settings/public")
+      .then((d) =>
+        setShop({ name: d.settings.shop_name || "SoftGlaze", logo: d.settings.shop_logo_thumb || d.settings.shop_logo })
+      )
       .catch(() => {});
   }, []);
 
@@ -42,11 +48,15 @@ export default function Login() {
 
       <div className="w-full max-w-sm">
         <div className="flex items-center gap-3 mb-8 justify-center">
-          <div className="w-11 h-11 rounded-lg bg-accent text-accent-ink flex items-center justify-center">
-            <Anvil size={24} />
-          </div>
+          {shop.logo ? (
+            <img src={shop.logo} alt="" className="w-11 h-11 rounded-lg object-cover border border-edge" />
+          ) : (
+            <div className="w-11 h-11 rounded-lg bg-accent text-accent-ink flex items-center justify-center">
+              <Anvil size={24} />
+            </div>
+          )}
           <div>
-            <h1 className="text-xl font-bold leading-tight">SoftGlaze</h1>
+            <h1 className="text-xl font-bold leading-tight">{shop.name}</h1>
             <p className="text-muted text-xs">Stock Management &amp; POS</p>
           </div>
         </div>

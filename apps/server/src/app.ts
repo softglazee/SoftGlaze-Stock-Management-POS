@@ -10,6 +10,9 @@ import settingRoutes from "./routes/settings.routes";
 import productRoutes from "./routes/products.routes";
 import customerRoutes from "./routes/customers.routes";
 import vendorRoutes from "./routes/vendors.routes";
+import brandRoutes from "./routes/brands.routes";
+import permissionRoutes from "./routes/permissions.routes";
+import importRoutes from "./routes/import.routes";
 
 const app = express();
 
@@ -39,6 +42,9 @@ app.use("/api/v1/settings", settingRoutes);      // Phase 1 (presets) — grows 
 app.use("/api/v1/products", productRoutes);      // Phase 1
 app.use("/api/v1/customers", customerRoutes);    // Phase 1
 app.use("/api/v1/vendors", vendorRoutes);        // Phase 1
+app.use("/api/v1/brands", brandRoutes);          // Phase 1 (G2)
+app.use("/api/v1/permissions", permissionRoutes);// Phase 1 (A2 foundation)
+app.use("/api/v1/import", importRoutes);          // Phase 1 (A3 + G7)
 // app.use("/api/v1/purchases", purchaseRoutes);    // Phase 2
 // app.use("/api/v1/sales", saleRoutes);            // Phase 3
 // app.use("/api/v1/payments", paymentRoutes);      // Phase 4

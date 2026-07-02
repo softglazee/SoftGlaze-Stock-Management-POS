@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
-import { Plus, Pencil, Trash2, Users } from "lucide-react";
+import { Plus, Pencil, Trash2, Users, Upload } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import { Customer, Paged } from "../lib/types";
 import { num, fmtMoney } from "../lib/format";
+import { useAuth } from "../context/AuthContext";
 import {
   PageHeader,
   Modal,
@@ -15,6 +16,7 @@ import {
   Pagination,
   useToast,
 } from "../components/ui";
+import ImportWizard from "../components/ImportWizard";
 
 type FormState = {
   name: string;
@@ -29,11 +31,13 @@ const emptyForm: FormState = { name: "", phone: "", address: "", taxNumber: "", 
 export default function Customers() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { can } = useAuth();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("active");
   const [page, setPage] = useState(1);
   const [editing, setEditing] = useState<Customer | "new" | null>(null);
   const [deleting, setDeleting] = useState<Customer | null>(null);
+  const [importing, setImporting] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [error, setError] = useState<string | null>(null);
 
@@ -116,9 +120,16 @@ export default function Customers() {
         title="Customers"
         sub={`Khata (udhaar) accounts and walk-ins. Total receivable: ${fmtMoney(data?.totalReceivable ?? 0)}`}
         actions={
-          <button className="btn btn-secondary" onClick={openNew}>
-            <Plus size={16} /> Add customer
-          </button>
+          <>
+            {can("customers.create") && (
+              <button className="btn btn-secondary" onClick={() => setImporting(true)}>
+                <Upload size={16} /> Import
+              </button>
+            )}
+            <button className="btn btn-secondary" onClick={openNew}>
+              <Plus size={16} /> Add customer
+            </button>
+          </>
         }
       />
 
@@ -311,6 +322,8 @@ export default function Customers() {
         onConfirm={() => deleting && remove.mutate(deleting.id)}
         onClose={() => setDeleting(null)}
       />
+
+      <ImportWizard entity="customers" open={importing} onClose={() => setImporting(false)} onDone={() => qc.invalidateQueries({ queryKey: ["customers"] })} />
     </div>
   );
 }

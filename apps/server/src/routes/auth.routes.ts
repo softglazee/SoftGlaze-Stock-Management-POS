@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { requireAuth, signAccessToken, signRefreshToken } from "../middleware/auth";
+import { getPermissionsForRole } from "../lib/permissions";
 
 const router = Router();
 
@@ -52,7 +53,8 @@ router.post("/register", async (req, res, next) => {
     });
     const tokens = await issueTokens(user);
     await prisma.auditLog.create({ data: { userId: user.id, action: "REGISTER", details: "Owner (SUPER_ADMIN) created" } });
-    res.status(201).json({ ok: true, data: { user: publicUser(user), ...tokens } });
+    const permissions = await getPermissionsForRole(user.role);
+    res.status(201).json({ ok: true, data: { user: publicUser(user), permissions, ...tokens } });
   } catch (err: any) {
     if (err instanceof z.ZodError) {
       return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: err.errors[0].message } });
@@ -90,7 +92,8 @@ router.post("/login", async (req, res, next) => {
 
     const tokens = await issueTokens(user);
     await prisma.auditLog.create({ data: { userId: user.id, action: "LOGIN", ip: req.ip } });
-    res.json({ ok: true, data: { user: publicUser(user), ...tokens } });
+    const permissions = await getPermissionsForRole(user.role);
+    res.json({ ok: true, data: { user: publicUser(user), permissions, ...tokens } });
   } catch (err: any) {
     if (err instanceof z.ZodError) {
       return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: err.errors[0].message } });
@@ -121,7 +124,8 @@ router.post("/refresh", async (req, res, next) => {
       return res.status(401).json({ ok: false, error: { code: "UNAUTHORIZED", message: "Session expired" } });
     }
     const tokens = await issueTokens(user);
-    res.json({ ok: true, data: { user: publicUser(user), ...tokens } });
+    const permissions = await getPermissionsForRole(user.role);
+    res.json({ ok: true, data: { user: publicUser(user), permissions, ...tokens } });
   } catch (err) {
     next(err);
   }
@@ -132,7 +136,8 @@ router.get("/me", requireAuth, async (req, res, next) => {
   try {
     const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
     if (!user) return res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "User not found" } });
-    res.json({ ok: true, data: { user: publicUser(user) } });
+    const permissions = await getPermissionsForRole(user.role);
+    res.json({ ok: true, data: { user: publicUser(user), permissions } });
   } catch (err) {
     next(err);
   }

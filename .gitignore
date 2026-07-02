@@ -6,6 +6,8 @@ release/
 .env.local
 apps/server/uploads/
 *.log
+*.tsbuildinfo
+.playwright-mcp/
 .DS_Store
 *.sql.gz
 apps/server/prisma/migrations/dev.db*

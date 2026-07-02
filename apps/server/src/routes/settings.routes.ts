@@ -2,26 +2,86 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { requireAuth, requireRole } from "../middleware/auth";
+import { requirePermission } from "../middleware/permission";
+import { imageUpload, saveImage, saveFavicon, deleteImageFiles } from "../lib/upload";
 import { BUSINESS_PRESETS, getPreset } from "../data/business-presets";
 import { nextSku } from "../utils/sku";
 
 const router = Router();
-router.use(requireAuth);
 
-/** Keys any admin may edit. Integrations (smtp_*, whatsapp_*) arrive in Phase 6. */
+/**
+ * Keys any settings-admin may edit (Shop Profile — A1 + G10 branding).
+ * Integrations (smtp_*, whatsapp_*) are gated separately in Phase 6.
+ */
 const EDITABLE_KEYS = [
+  // Identity
   "shop_name",
+  "shop_tagline",
+  // Contact
   "shop_address",
+  "shop_address2",
+  "shop_city",
   "shop_phone",
+  "shop_phone2",
+  "shop_whatsapp",
+  "shop_email",
+  "shop_website",
+  // Legal
+  "tax_number",
+  "strn",
+  "cnic",
+  // Invoice
+  "invoice_prefix",
+  "invoice_header_lines",
+  "invoice_footer",
+  "invoice_footer_urdu",
+  "show_logo",
+  "receipt_size",
+  // Regional
   "currency",
   "currency_symbol",
   "tax_percent",
-  "invoice_prefix",
-  "invoice_footer",
-  "receipt_size",
+  "date_format",
+  "timezone",
+  // Branding (G10)
+  "page_title",
+  // Reminders
   "low_stock_sweep_time",
   "debt_reminder_days",
 ] as const;
+
+/**
+ * Keys safe to expose WITHOUT auth (login page, receipts, PDF headers need these).
+ * Never include integration secrets here.
+ */
+const PUBLIC_KEYS = [
+  "shop_name",
+  "shop_tagline",
+  "shop_logo",
+  "shop_logo_thumb",
+  "currency",
+  "currency_symbol",
+  "business_type",
+  "page_title",
+  "favicon",
+  "receipt_size",
+  "invoice_prefix",
+] as const;
+
+/** GET /settings/public — unauthenticated shop identity for the login page & PDFs */
+router.get("/public", async (_req, res, next) => {
+  try {
+    const rows = await prisma.setting.findMany({ where: { key: { in: PUBLIC_KEYS as unknown as string[] } } });
+    const settings: Record<string, string> = {};
+    for (const row of rows) settings[row.key] = row.value;
+    res.json({ ok: true, data: { settings } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Everything below requires a logged-in user
+router.use(requireAuth);
 
 /** GET /settings — key/value map (all logged-in users need shop name, currency…) */
 router.get("/", async (_req, res, next) => {
@@ -36,7 +96,7 @@ router.get("/", async (_req, res, next) => {
 });
 
 /** PATCH /settings — { key: value, ... } (whitelisted keys) */
-router.patch("/", requireRole("SUPER_ADMIN", "ADMIN"), async (req, res, next) => {
+router.patch("/", requirePermission("settings.shop"), async (req, res, next) => {
   try {
     const body = z.record(z.string()).parse(req.body);
     const entries = Object.entries(body).filter(([key]) => (EDITABLE_KEYS as readonly string[]).includes(key));
@@ -54,6 +114,68 @@ router.patch("/", requireRole("SUPER_ADMIN", "ADMIN"), async (req, res, next) =>
     if (err instanceof z.ZodError) {
       return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: "Settings must be text values" } });
     }
+    next(err);
+  }
+});
+
+/** Helper: read a single setting value (or null). */
+async function getSetting(key: string): Promise<string | null> {
+  const row = await prisma.setting.findUnique({ where: { key } });
+  return row?.value ?? null;
+}
+
+/**
+ * POST /settings/logo — multipart field "logo" (A1 logo pipeline).
+ * sharp → webp (1200px) + thumb (300px, used on receipts). Old logo files are
+ * removed only after the new one is safely stored.
+ */
+router.post("/logo", requirePermission("settings.shop"), imageUpload.single("logo"), async (req, res, next) => {
+  try {
+    const file = req.file as Express.Multer.File | undefined;
+    if (!file) {
+      return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: "No logo file received" } });
+    }
+    const [oldMain, oldThumb] = await Promise.all([getSetting("shop_logo"), getSetting("shop_logo_thumb")]);
+    const saved = await saveImage(file.buffer, "branding");
+    await prisma.$transaction([
+      prisma.setting.upsert({ where: { key: "shop_logo" }, create: { key: "shop_logo", value: saved.path }, update: { value: saved.path } }),
+      prisma.setting.upsert({ where: { key: "shop_logo_thumb" }, create: { key: "shop_logo_thumb", value: saved.thumbPath }, update: { value: saved.thumbPath } }),
+    ]);
+    await deleteImageFiles(oldMain, oldThumb);
+    await prisma.auditLog.create({ data: { userId: req.user!.id, action: "UPDATE_SETTING", entity: "Setting", details: "shop_logo" } });
+    res.json({ ok: true, data: { shop_logo: saved.path, shop_logo_thumb: saved.thumbPath } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** DELETE /settings/logo — remove the shop logo */
+router.delete("/logo", requirePermission("settings.shop"), async (req, res, next) => {
+  try {
+    const [oldMain, oldThumb] = await Promise.all([getSetting("shop_logo"), getSetting("shop_logo_thumb")]);
+    await prisma.setting.deleteMany({ where: { key: { in: ["shop_logo", "shop_logo_thumb"] } } });
+    await deleteImageFiles(oldMain, oldThumb);
+    await prisma.auditLog.create({ data: { userId: req.user!.id, action: "UPDATE_SETTING", entity: "Setting", details: "shop_logo removed" } });
+    res.json({ ok: true, data: { message: "Logo removed" } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** POST /settings/favicon — multipart field "favicon" → 64px PNG (G10 branding) */
+router.post("/favicon", requirePermission("settings.shop"), imageUpload.single("favicon"), async (req, res, next) => {
+  try {
+    const file = req.file as Express.Multer.File | undefined;
+    if (!file) {
+      return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: "No favicon file received" } });
+    }
+    const old = await getSetting("favicon");
+    const path = await saveFavicon(file.buffer);
+    await prisma.setting.upsert({ where: { key: "favicon" }, create: { key: "favicon", value: path }, update: { value: path } });
+    await deleteImageFiles(old);
+    await prisma.auditLog.create({ data: { userId: req.user!.id, action: "UPDATE_SETTING", entity: "Setting", details: "favicon" } });
+    res.json({ ok: true, data: { favicon: path } });
+  } catch (err) {
     next(err);
   }
 });

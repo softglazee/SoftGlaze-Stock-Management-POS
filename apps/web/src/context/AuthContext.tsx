@@ -7,6 +7,8 @@ export type User = { id: string; name: string; email: string; role: Role; phone?
 
 type AuthState = {
   user: User | null;
+  permissions: string[];
+  can: (...keys: string[]) => boolean;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string, phone?: string) => Promise<void>;
@@ -15,18 +17,29 @@ type AuthState = {
 
 const AuthContext = createContext<AuthState>(null as never);
 
+type AuthPayload = { user: User; permissions?: string[]; accessToken: string; refreshToken: string };
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [permissions, setPermissions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+
+  // SUPER_ADMIN implicitly has everything; otherwise check the fetched set
+  function can(...keys: string[]) {
+    if (!user) return false;
+    if (user.role === "SUPER_ADMIN") return true;
+    return keys.some((k) => permissions.includes(k));
+  }
 
   // Restore session on refresh
   useEffect(() => {
     (async () => {
       if (!getRefreshToken()) return setLoading(false);
       try {
-        const data = await api<{ user: User }>("/auth/me");
+        const data = await api<{ user: User; permissions?: string[] }>("/auth/me");
         setUser(data.user);
+        setPermissions(data.permissions ?? []);
       } catch {
         setTokens(null, null);
       } finally {
@@ -36,22 +49,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   async function login(email: string, password: string) {
-    const data = await api<{ user: User; accessToken: string; refreshToken: string }>("/auth/login", {
-      method: "POST",
-      body: { email, password },
-    });
+    const data = await api<AuthPayload>("/auth/login", { method: "POST", body: { email, password } });
     setTokens(data.accessToken, data.refreshToken);
     setUser(data.user);
+    setPermissions(data.permissions ?? []);
     navigate("/");
   }
 
   async function register(name: string, email: string, password: string, phone?: string) {
-    const data = await api<{ user: User; accessToken: string; refreshToken: string }>("/auth/register", {
-      method: "POST",
-      body: { name, email, password, phone },
-    });
+    const data = await api<AuthPayload>("/auth/register", { method: "POST", body: { name, email, password, phone } });
     setTokens(data.accessToken, data.refreshToken);
     setUser(data.user);
+    setPermissions(data.permissions ?? []);
     navigate("/");
   }
 
@@ -63,11 +72,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setTokens(null, null);
     setUser(null);
+    setPermissions([]);
     navigate("/login");
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>{children}</AuthContext.Provider>
+    <AuthContext.Provider value={{ user, permissions, can, loading, login, register, logout }}>
+      {children}
+    </AuthContext.Provider>
   );
 }
 

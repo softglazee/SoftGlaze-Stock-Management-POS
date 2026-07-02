@@ -29,24 +29,49 @@ export type ProductImage = {
   sortOrder: number;
 };
 
+export type ProductType = "STANDARD" | "SERVICE" | "COMBO";
+
+export type Brand = {
+  id: string;
+  name: string;
+  image: string | null;
+  isActive: boolean;
+  _count?: { products: number };
+};
+
+export type ComboItemView = {
+  id: string;
+  componentProductId: string;
+  qty: string;
+  componentProduct?: { id: string; name: string; sku: string; unit?: { shortName: string } };
+};
+
 export type Product = {
   id: string;
   sku: string;
   barcode: string | null;
   name: string;
   description: string | null;
+  type: ProductType;
   categoryId: string;
   category?: { id: string; name: string };
   unitId: string;
   unit?: { id: string; name: string; shortName: string };
+  brandId: string | null;
+  brand?: { id: string; name: string } | null;
   costPrice: string;
   salePrice: string;
   wholesalePrice: string | null;
   taxPercent: string;
   stockQty: string;
   minStockLevel: string;
+  length: string | null;
+  width: string | null;
+  height: string | null;
+  weight: string | null;
   isActive: boolean;
   images: ProductImage[];
+  comboItems?: ComboItemView[];
 };
 
 export type Customer = {

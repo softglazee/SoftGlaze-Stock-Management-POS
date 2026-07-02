@@ -4,6 +4,7 @@
  * NOTE: does NOT create a user — the first registration from the app becomes ADMIN.
  */
 import { PrismaClient } from "@prisma/client";
+import { seedPermissions } from "../src/data/permissions";
 
 const prisma = new PrismaClient();
 
@@ -99,7 +100,10 @@ async function main() {
     await prisma.setting.upsert({ where: { key }, create: { key, value }, update: {} });
   }
 
-  console.log("✅ Seed complete: units, categories, payment methods, expense categories, settings.");
+  // ── Permissions catalog + role defaults (A2) ──
+  await seedPermissions(prisma);
+
+  console.log("✅ Seed complete: units, categories, payment methods, expense categories, settings, permissions.");
   console.log("👉 Now open the app and create your admin account on the Register page.");
 }
 
