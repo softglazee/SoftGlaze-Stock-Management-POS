@@ -100,6 +100,79 @@ export type Vendor = {
   isActive: boolean;
 };
 
+export type PaymentMethod = { id: string; name: string; isCash: boolean; isActive: boolean };
+
+export type PurchaseItem = {
+  id: string;
+  productId: string;
+  product?: { id: string; name: string; sku: string; unit?: { shortName: string } };
+  qty: string;
+  unitCost: string;
+  discount: string;
+  total: string;
+};
+export type PurchasePayment = { id: string; amount: string; method?: { name: string } };
+export type PurchaseStatus = "DRAFT" | "RECEIVED" | "RETURNED" | "CANCELLED";
+export type Purchase = {
+  id: string;
+  invoiceNo: string;
+  vendorId: string;
+  vendor?: { id: string; code: string; name: string };
+  user?: { id: string; name: string };
+  refInvoiceNo: string | null;
+  date: string;
+  status: PurchaseStatus;
+  subTotal: string;
+  discount: string;
+  tax: string;
+  otherCharges: string;
+  grandTotal: string;
+  paidAmount: string;
+  dueAmount: string;
+  notes: string | null;
+  isReturn: boolean;
+  returnOfId: string | null;
+  items: PurchaseItem[];
+  payments?: PurchasePayment[];
+};
+
+export type StockMoveType =
+  | "PURCHASE"
+  | "PURCHASE_RETURN"
+  | "SALE"
+  | "SALE_RETURN"
+  | "ADJUSTMENT_IN"
+  | "ADJUSTMENT_OUT"
+  | "DAMAGE"
+  | "OPENING";
+export type StockMovement = {
+  id: string;
+  productId: string;
+  product?: { id: string; name: string; sku: string; unit?: { shortName: string } };
+  type: StockMoveType;
+  qty: string;
+  unitCost: string | null;
+  refType: string | null;
+  refId: string | null;
+  balance: string;
+  date: string;
+  notes: string | null;
+};
+export type StockAdjustmentItem = {
+  id: string;
+  productId: string;
+  product?: { name: string; sku: string; unit?: { shortName: string } };
+  qtyChange: string;
+};
+export type StockAdjustment = {
+  id: string;
+  refNo: string;
+  reason: string;
+  date: string;
+  user?: { name: string };
+  items: StockAdjustmentItem[];
+};
+
 export type BusinessPresetInfo = {
   key: string;
   label: string;

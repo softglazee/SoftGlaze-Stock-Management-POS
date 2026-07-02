@@ -3,7 +3,61 @@
 > Living hand-off file. Updated after every module or mid-task stop.
 > Read this at the start of every session (see CLAUDE.md → Grounding & session continuity rules).
 
-## Current status (2026-07-02) — Phase 1 UPGRADES COMPLETE ✅ (A1–A4, G2, G3, G7, G10)
+## Current status (2026-07-02) — Phase 2 CORE COMPLETE ✅ (Purchasing & stock)
+
+**What was just done (Phase 2 core, all verified). No schema change — models already existed:**
+- **`lib/stock.ts`** — reusable ledger service: `applyMovement(tx, {...})` appends a
+  StockMovement with running `balance` and updates cached `Product.stockQty` in the same
+  tx (blocks negative unless `allowNegative`); `weightedAvg()` (guards div-by-zero, 2dp);
+  `InsufficientStockError`. Phase 3 sales will reuse this.
+- **`routes/purchases.routes.ts`** — `GET /purchases` (page/search/vendor/status/date + totals),
+  `GET /:id`, `POST /` (one transaction: Purchase + PurchaseItems + PURCHASE StockMovements +
+  weighted-avg costPrice update + stockQty + Vendor.balance += due + Payment(s) + PUR-/PAY-
+  counters + audit; rejects SERVICE/COMBO items; partial/full payment; udhaar = due),
+  `POST /:id/return` (PRET- doc, PURCHASE_RETURN movements at original line cost, stockQty down,
+  Vendor.balance −= return value; avg unchanged since removals don't move it).
+- **`routes/stock.routes.ts`** — `GET /movements` (ledger, product/type/date filters),
+  `GET/POST /adjustments` (ADJ- doc; ADJUSTMENT_IN / ADJUSTMENT_OUT / DAMAGE; blocks negative),
+  `POST /recalculate` [ADMIN] rebuilds stockQty from ledger.
+- **`routes/payment-methods.routes.ts`** — `GET /payment-methods` read-only (CRUD in Phase 4).
+- Guards use `requirePermission` (purchases.view/create/return, stock.adjust); recalc = ADMIN.
+- Web: `pages/Purchases.tsx` (list + New-purchase modal with vendor, product-search line items,
+  discount/tax/freight, pay-now method + amount, live grand/due; view + return modal) and
+  `pages/Stock.tsx` (Ledger tab with product/type filter + Adjustments tab with New-adjustment
+  modal). Nav: Purchases → real page, new **Stock** item. `lib/types.ts` extended
+  (Purchase/PurchaseItem/StockMovement/StockAdjustment/PaymentMethod).
+
+**Verified (rule-2):**
+- `npx tsc --noEmit` (server) + `tsc -b` (web) both clean.
+- End-to-end money math with a signed dev JWT on an isolated test product:
+  P1 100@1300 pay 50000 → stock 100, cost 1300, vendor bal 80000, due 80000 ✓;
+  P2 50@1400 → stock 150, **weighted-avg 1333.33**, vendor bal 150000 ✓;
+  return 20 → stock 130, cost unchanged 1333.33, vendor bal 124000 ✓;
+  damage −10 → stock 120 ✓; ledger shows 2×PURCHASE + PURCHASE_RETURN + DAMAGE ✓;
+  over-issue −1000 → **409 INSUFFICIENT_STOCK** ✓; recalculate → corrected 0 (cache==ledger) ✓.
+- Browser (Playwright, dev token): /purchases + New-purchase modal, /stock (Ledger + Adjustments)
+  all load with **0 app console errors**.
+- All test rows cleaned; counters purchase/purchase_return/adjustment/payment/vendor reset to 0.
+
+**Exact next step:** Owner to confirm, then **Phase 3 — POS** per KICKOFF-PROMPT.md + docs/11 A5
+(full-screen keyboard-first POS, split payments incl. udhaar with credit-limit check, hold/resume,
+80mm + A4 invoices, sales returns, quotations). Phase 3 sale transaction is where **G3 combo stock
+logic** (deduct component stock at snapshot cost) and price-volatility snapshots land, reusing
+`lib/stock.ts`. Also still pending from Phase 2: **A7 medical preset + ProductBatch/FEFO** — build
+when the owner needs the medical/food business type (needs a migration).
+
+**Known issues / notes:**
+- Purchase invoice PDF (`GET /purchases/:id/invoice.pdf`) deferred — PDFs come with POS receipts
+  (Phase 3) / reports (Phase 5).
+- Purchase returns don't yet track cumulative returned-qty per line, so the same line could be
+  over-returned across multiple return docs (guarded only against the original qty each time).
+  Fine for v1; tighten if needed.
+- DB still started manually (`scripts\start-db.ps1` / pg_ctl); Prisma generate needs port-4000
+  node stopped first on Windows (EPERM). See [[softglaze-environment]].
+
+---
+
+## Prior status (2026-07-02) — Phase 1 UPGRADES COMPLETE ✅ (A1–A4, G2, G3, G7, G10)
 
 **What was just done (Phase 1 upgrade items, all verified):**
 - **Schema migration** `phase1_upgrades_brands_types_permissions`: `Brand`, `ProductType` enum

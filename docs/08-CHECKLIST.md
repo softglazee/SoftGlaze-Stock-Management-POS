@@ -29,11 +29,12 @@ Tick things off as we build. Mirrors the phases in 01-BUILD-PLAN.md.
 - [x] G10 Product dimensions (L×W×H + weight) fields · favicon + page title in branding
 
 ## Phase 2 — Purchasing & stock
-- [ ] Purchase entry → stock in + weighted avg cost
-- [ ] Stock adjustments  ·  [ ] Purchase returns
-- [ ] Low stock alerts
-- [ ] A7 Medical Store preset + generic batch/expiry FEFO (`track_batches` flag)
-- [ ] G3 Combo stock logic (selling a combo deducts component stock at snapshot costs)
+- [x] Purchase entry → stock in + weighted avg cost (POST /purchases, one transaction; verified 100@1300 then 50@1400 → avg 1333.33)
+- [x] Stock adjustments (POST /stock/adjustments, damage/count/expiry)  ·  [x] Purchase returns (POST /purchases/:id/return, stock out + payable reduced)
+- [x] Low stock alerts (GET /products/low-stock + status=low filter; dashboard widget lands in Phase 5)
+- [x] Stock ledger (GET /stock/movements) + POST /stock/recalculate integrity rebuild
+- [ ] A7 Medical Store preset + generic batch/expiry FEFO (`track_batches` flag) — deferred (needs ProductBatch migration; owner is building-materials, not needed yet)
+- [ ] G3 Combo stock logic (selling a combo deducts component stock at snapshot costs) — lands in Phase 3 (needs the sale transaction; ComboItem model is ready)
 
 ## Phase 3 — POS
 - [ ] POS screen exactly per docs/11 A5 (quick-add customer, quick keys, split pay, success screen)

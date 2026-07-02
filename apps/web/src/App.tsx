@@ -10,6 +10,8 @@ import Units from "./pages/Units";
 import Categories from "./pages/Categories";
 import Products from "./pages/Products";
 import Brands from "./pages/Brands";
+import Purchases from "./pages/Purchases";
+import Stock from "./pages/Stock";
 import Customers from "./pages/Customers";
 import Vendors from "./pages/Vendors";
 
@@ -67,7 +69,8 @@ export default function App() {
         <Route path="/brands" element={<Brands />} />
         <Route path="/categories" element={<Categories />} />
         <Route path="/units" element={<Units />} />
-        <Route path="/purchases" element={<ComingSoon title="Purchases" phase="Phase 2" />} />
+        <Route path="/purchases" element={<Purchases />} />
+        <Route path="/stock" element={<Stock />} />
         <Route path="/customers" element={<Customers />} />
         <Route path="/vendors" element={<Vendors />} />
         <Route path="/payments" element={<ComingSoon title="Payments" phase="Phase 4" />} />
