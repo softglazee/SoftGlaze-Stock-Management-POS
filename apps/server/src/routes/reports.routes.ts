@@ -1,7 +1,8 @@
 /**
- * Reports (Phase 4 slice): the integrity self-audit (built early per CLAUDE rule 1),
- * the day-close cash book, and the balance sheet. Full sales/P&L/stock reports with
- * PDF/Excel land in Phase 5. Everything here is READ-ONLY and reconstructs figures
+ * Reports. Phase 4 slice: integrity self-audit (CLAUDE rule 1), cash book, balance
+ * sheet. Phase 5: dashboard + P&L, sales/purchase registers, stock valuation,
+ * receivables/payables aging, expenses, sales-by-payment-method, stock movements —
+ * each with JSON / PDF / Excel via sendReport(). Everything READ-ONLY and rebuilt
  * from the source ledgers so nothing can silently drift.
  */
 import { Router } from "express";
@@ -10,6 +11,8 @@ import { prisma } from "../lib/prisma";
 import { requireAuth } from "../middleware/auth";
 import { requirePermission } from "../middleware/permission";
 import { paymentSign } from "../lib/accounts";
+import { roleHasPermission } from "../lib/permissions";
+import { sendReport, ReportDoc } from "../lib/report-export";
 
 const router = Router();
 router.use(requireAuth);
@@ -17,6 +20,20 @@ router.use(requireAuth);
 const r2 = (v: number) => Math.round(v * 100) / 100;
 const money = (v: number) => new Prisma.Decimal(r2(v)).toDecimalPlaces(2);
 const num = (v: Prisma.Decimal | number | null | undefined) => (v == null ? 0 : Number(v));
+
+async function loadSettings(): Promise<Record<string, string>> {
+  const rows = await prisma.setting.findMany();
+  return Object.fromEntries(rows.map((s) => [s.key, s.value]));
+}
+
+/** Resolve a from/to window (defaults to the last 30 days) + a label for the report. */
+function periodOf(req: { query: Record<string, unknown> }) {
+  const to = req.query.to ? new Date(String(req.query.to)) : (() => { const d = new Date(); d.setHours(23, 59, 59, 999); return d; })();
+  const from = req.query.from ? new Date(String(req.query.from)) : (() => { const d = new Date(); d.setDate(d.getDate() - 29); d.setHours(0, 0, 0, 0); return d; })();
+  const fmt = (d: Date) => d.toLocaleDateString("en-GB");
+  return { from, to, label: `${fmt(from)} – ${fmt(to)}`, meta: [{ label: "Period", value: `${fmt(from)} to ${fmt(to)}` }] };
+}
+const fmtReq = (req: { query: Record<string, unknown> }) => String(req.query.format ?? "json");
 
 // ─────────────────────────── INTEGRITY ───────────────────────────
 
@@ -199,12 +216,20 @@ async function computeBalanceSheet() {
   const capitalIn = r2(num(capital.find((c) => c.direction === "CAPITAL_IN")?._sum.amount));
   const drawings = r2(num(capital.find((c) => c.direction === "DRAWING")?._sum.amount));
 
+  // Inventory value implied by the stock ledger (each movement at its recorded cost).
+  // Differs from stockValue (stockQty×current cost) only by manual cost-price
+  // revaluations and weighted-avg rounding — recognise that difference in equity so
+  // the sheet balances exactly regardless of price edits.
+  const flowRows = await prisma.$queryRaw<{ v: Prisma.Decimal | null }[]>`SELECT COALESCE(SUM("qty" * "unitCost"), 0) AS v FROM "StockMovement" WHERE "unitCost" IS NOT NULL`;
+  const flowInventoryValue = r2(num(flowRows[0]?.v));
+
   const salesNetProfit = r2(num(salesProfit._sum.profit) - num(retProfit._sum.profit));
   const totalExpenses = r2(num(expenseAgg._sum.amount));
   const inventoryValueAdded = r2(purItems.reduce((s, it) => s + num(it.qty) * num(it.unitCost), 0));
   const purchaseGap = r2(num(purAgg._sum.grandTotal) - inventoryValueAdded); // freight + tax − discounts on bills
   const adjustmentValue = r2(adjMoves.reduce((s, m) => s + num(m.qty) * num(m.unitCost), 0));
-  const retainedEarnings = r2(salesNetProfit - totalExpenses - purchaseGap + adjustmentValue);
+  const revaluation = r2(stockValue - flowInventoryValue); // manual cost edits + rounding
+  const retainedEarnings = r2(salesNetProfit - totalExpenses - purchaseGap + adjustmentValue + revaluation);
 
   const assetsTotal = r2(cashBank + stockValue + receivables + vendorAdvances);
   const liabilitiesTotal = r2(payables + customerAdvances);
@@ -258,6 +283,25 @@ router.get("/cashbook", requirePermission("accounts.view"), async (req, res, nex
       moneyOut: money(rows.reduce((s, r) => s + num(r.moneyOut), 0)),
       closing: money(rows.reduce((s, r) => s + num(r.closing), 0)),
     };
+
+    const format = fmtReq(req);
+    if (format !== "json") {
+      const fmt = (d: Date) => d.toLocaleDateString("en-GB");
+      const doc: ReportDoc = {
+        title: "Cash Book",
+        meta: [{ label: "Period", value: `${fmt(from)} to ${fmt(to)}` }],
+        columns: [
+          { header: "Account", key: "name" },
+          { header: "Opening", key: "opening", align: "right", money: true },
+          { header: "Money in", key: "moneyIn", align: "right", money: true },
+          { header: "Money out", key: "moneyOut", align: "right", money: true },
+          { header: "Closing", key: "closing", align: "right", money: true },
+        ],
+        rows: rows.map((r) => ({ name: r.name, opening: num(r.opening), moneyIn: num(r.moneyIn), moneyOut: num(r.moneyOut), closing: num(r.closing) })),
+        totals: { name: "Total", opening: num(totals.opening), moneyIn: num(totals.moneyIn), moneyOut: num(totals.moneyOut), closing: num(totals.closing) },
+      };
+      return sendReport(res, format, "cash-book", doc, await loadSettings());
+    }
     res.json({ ok: true, data: { from, to, rows, totals } });
   } catch (err) {
     next(err);
@@ -274,5 +318,352 @@ function endOfToday() {
   d.setHours(23, 59, 59, 999);
   return d;
 }
+
+// ─────────────────────────── PROFIT & LOSS ───────────────────────────
+
+/** GET /reports/profit-loss?from&to[&format] — accrual P&L for the period */
+router.get("/profit-loss", requirePermission("reports.profit"), async (req, res, next) => {
+  try {
+    const { from, to, meta } = periodOf(req);
+    const where = { date: { gte: from, lte: to } } as const;
+    const [salesAgg, retAgg, expByCat] = await Promise.all([
+      prisma.sale.aggregate({ _sum: { grandTotal: true, totalCost: true, profit: true }, where: { ...where, status: "COMPLETED", isReturn: false } }),
+      prisma.sale.aggregate({ _sum: { grandTotal: true, totalCost: true, profit: true }, where: { ...where, isReturn: true } }),
+      prisma.expense.groupBy({ by: ["categoryId"], _sum: { amount: true }, where }),
+    ]);
+    const cats = await prisma.expenseCategory.findMany({ where: { id: { in: expByCat.map((e) => e.categoryId) } }, select: { id: true, name: true } });
+    const catName = new Map(cats.map((c) => [c.id, c.name]));
+
+    const revenue = num(salesAgg._sum.grandTotal);
+    const returns = num(retAgg._sum.grandTotal);
+    const netSales = r2(revenue - returns);
+    const cogs = r2(num(salesAgg._sum.totalCost) - num(retAgg._sum.totalCost));
+    const grossProfit = r2(netSales - cogs);
+    const expenseRows = expByCat.map((e) => ({ label: `  ${catName.get(e.categoryId) ?? "Expense"}`, amount: -num(e._sum.amount) })).sort((a, b) => a.amount - b.amount);
+    const totalExpenses = r2(expByCat.reduce((s, e) => s + num(e._sum.amount), 0));
+    const netProfit = r2(grossProfit - totalExpenses);
+
+    const doc: ReportDoc = {
+      title: "Profit & Loss",
+      meta,
+      columns: [{ header: "", key: "label" }, { header: "Amount", key: "amount", align: "right", money: true }],
+      rows: [
+        { label: "Sales revenue", amount: revenue },
+        { label: "Less: Sales returns", amount: -returns },
+        { label: "Net sales", amount: netSales },
+        { label: "Less: Cost of goods sold", amount: -cogs },
+        { label: "Gross profit", amount: grossProfit },
+        { label: "Expenses:", amount: null },
+        ...expenseRows,
+        { label: "Total expenses", amount: -totalExpenses },
+      ],
+      totals: { label: "Net profit", amount: netProfit },
+    };
+    return sendReport(res, fmtReq(req), "profit-and-loss", doc, await loadSettings(), { summary: { revenue, returns, netSales, cogs, grossProfit, totalExpenses, netProfit } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─────────────────────────── SALES / PURCHASE REGISTERS ───────────────────────────
+
+/** GET /reports/sales?from&to[&format] — sales register */
+router.get("/sales", requirePermission("reports.view"), async (req, res, next) => {
+  try {
+    const { from, to, meta } = periodOf(req);
+    const canProfit = await roleHasPermission(req.user!.role, "reports.profit");
+    const sales = await prisma.sale.findMany({
+      where: { date: { gte: from, lte: to }, status: "COMPLETED", isReturn: false },
+      select: { date: true, invoiceNo: true, grandTotal: true, paidAmount: true, dueAmount: true, profit: true, customer: { select: { name: true } } },
+      orderBy: { date: "asc" },
+    });
+    const columns = [
+      { header: "Date", key: "date" },
+      { header: "Invoice", key: "invoiceNo" },
+      { header: "Customer", key: "customer" },
+      { header: "Total", key: "grandTotal", align: "right" as const, money: true },
+      { header: "Paid", key: "paidAmount", align: "right" as const, money: true },
+      { header: "Due", key: "dueAmount", align: "right" as const, money: true },
+      ...(canProfit ? [{ header: "Profit", key: "profit", align: "right" as const, money: true }] : []),
+    ];
+    const rows = sales.map((s) => ({ date: s.date.toLocaleDateString("en-GB"), invoiceNo: s.invoiceNo, customer: s.customer?.name ?? "Walk-in", grandTotal: num(s.grandTotal), paidAmount: num(s.paidAmount), dueAmount: num(s.dueAmount), ...(canProfit ? { profit: num(s.profit) } : {}) }));
+    const totals: any = { date: "Total", grandTotal: r2(rows.reduce((a, r) => a + r.grandTotal, 0)), paidAmount: r2(rows.reduce((a, r) => a + r.paidAmount, 0)), dueAmount: r2(rows.reduce((a, r) => a + r.dueAmount, 0)) };
+    if (canProfit) totals.profit = r2(rows.reduce((a, r) => a + (r.profit ?? 0), 0));
+    return sendReport(res, fmtReq(req), "sales-register", { title: "Sales Register", meta, columns, rows, totals }, await loadSettings());
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** GET /reports/purchases?from&to[&format] — purchase register */
+router.get("/purchases", requirePermission("reports.view"), async (req, res, next) => {
+  try {
+    const { from, to, meta } = periodOf(req);
+    const purchases = await prisma.purchase.findMany({
+      where: { date: { gte: from, lte: to }, status: "RECEIVED", isReturn: false },
+      select: { date: true, invoiceNo: true, grandTotal: true, paidAmount: true, dueAmount: true, vendor: { select: { name: true } } },
+      orderBy: { date: "asc" },
+    });
+    const columns = [
+      { header: "Date", key: "date" },
+      { header: "Invoice", key: "invoiceNo" },
+      { header: "Vendor", key: "vendor" },
+      { header: "Total", key: "grandTotal", align: "right" as const, money: true },
+      { header: "Paid", key: "paidAmount", align: "right" as const, money: true },
+      { header: "Due", key: "dueAmount", align: "right" as const, money: true },
+    ];
+    const rows = purchases.map((p) => ({ date: p.date.toLocaleDateString("en-GB"), invoiceNo: p.invoiceNo, vendor: p.vendor?.name ?? "—", grandTotal: num(p.grandTotal), paidAmount: num(p.paidAmount), dueAmount: num(p.dueAmount) }));
+    const totals = { date: "Total", grandTotal: r2(rows.reduce((a, r) => a + r.grandTotal, 0)), paidAmount: r2(rows.reduce((a, r) => a + r.paidAmount, 0)), dueAmount: r2(rows.reduce((a, r) => a + r.dueAmount, 0)) };
+    return sendReport(res, fmtReq(req), "purchase-register", { title: "Purchase Register", meta, columns, rows, totals }, await loadSettings());
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─────────────────────────── STOCK VALUATION ───────────────────────────
+
+/** GET /reports/stock-valuation?basis=cost|sale[&format] */
+router.get("/stock-valuation", requirePermission("reports.view"), async (req, res, next) => {
+  try {
+    const basis = String(req.query.basis ?? "cost") === "sale" ? "sale" : "cost";
+    if (basis === "cost") {
+      const canProfit = await roleHasPermission(req.user!.role, "reports.profit");
+      if (!canProfit) return res.status(403).json({ ok: false, error: { code: "FORBIDDEN", message: "Cost valuation needs profit permission — try the sale-price basis" } });
+    }
+    const products = await prisma.product.findMany({ where: { isActive: true, type: "STANDARD" }, select: { sku: true, name: true, stockQty: true, costPrice: true, salePrice: true }, orderBy: { name: "asc" } });
+    const rows = products.map((p) => {
+      const qty = num(p.stockQty);
+      const unit = basis === "cost" ? num(p.costPrice) : num(p.salePrice);
+      return { sku: p.sku, name: p.name, qty, unit, value: r2(qty * unit) };
+    });
+    const doc: ReportDoc = {
+      title: `Stock Valuation (at ${basis === "cost" ? "cost" : "sale price"})`,
+      meta: [{ label: "As of", value: new Date().toLocaleDateString("en-GB") }],
+      columns: [
+        { header: "SKU", key: "sku" },
+        { header: "Product", key: "name" },
+        { header: "Qty", key: "qty", align: "right" },
+        { header: basis === "cost" ? "Unit cost" : "Sale price", key: "unit", align: "right", money: true },
+        { header: "Value", key: "value", align: "right", money: true },
+      ],
+      rows,
+      totals: { sku: "Total", value: r2(rows.reduce((a, r) => a + r.value, 0)) },
+    };
+    return sendReport(res, fmtReq(req), `stock-valuation-${basis}`, doc, await loadSettings(), { totalValue: r2(rows.reduce((a, r) => a + r.value, 0)) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─────────────────────────── AGING (receivables & payables) ───────────────────────────
+
+function agingBuckets(balance: number, charges: { date: Date; amount: number }[]) {
+  const now = Date.now();
+  const b = { b0_30: 0, b31_60: 0, b61_90: 0, b90p: 0 };
+  const sorted = [...charges].sort((a, z) => z.date.getTime() - a.date.getTime()); // newest first
+  let rem = balance;
+  for (const c of sorted) {
+    if (rem <= 0.005) break;
+    const amt = Math.min(rem, c.amount);
+    const days = (now - c.date.getTime()) / 86400000;
+    if (days <= 30) b.b0_30 += amt; else if (days <= 60) b.b31_60 += amt; else if (days <= 90) b.b61_90 += amt; else b.b90p += amt;
+    rem -= amt;
+  }
+  if (rem > 0.005) b.b90p += rem; // fallback: unattributed balance is treated as oldest
+  return { b0_30: r2(b.b0_30), b31_60: r2(b.b31_60), b61_90: r2(b.b61_90), b90p: r2(b.b90p) };
+}
+
+/** GET /reports/receivables[&format] — customer receivable aging */
+router.get("/receivables", requirePermission("reports.view"), async (req, res, next) => {
+  try {
+    const customers = await prisma.customer.findMany({ where: { balance: { gt: 0 } }, select: { id: true, code: true, name: true, phone: true, balance: true, openingBalance: true, createdAt: true }, orderBy: { balance: "desc" } });
+    const sales = await prisma.sale.findMany({ where: { customerId: { in: customers.map((c) => c.id) }, status: "COMPLETED", isReturn: false, dueAmount: { gt: 0 } }, select: { customerId: true, date: true, dueAmount: true } });
+    const byCust = new Map<string, { date: Date; amount: number }[]>();
+    for (const c of customers) byCust.set(c.id, num(c.openingBalance) > 0 ? [{ date: c.createdAt, amount: num(c.openingBalance) }] : []);
+    for (const s of sales) byCust.get(s.customerId!)?.push({ date: s.date, amount: num(s.dueAmount) });
+
+    const rows = customers.map((c) => { const a = agingBuckets(num(c.balance), byCust.get(c.id) ?? []); return { code: c.code, name: c.name, phone: c.phone ?? "", ...a, total: num(c.balance) }; });
+    const sum = (k: string) => r2(rows.reduce((a, r) => a + (r as any)[k], 0));
+    const doc: ReportDoc = {
+      title: "Receivables Aging",
+      meta: [{ label: "As of", value: new Date().toLocaleDateString("en-GB") }],
+      columns: [
+        { header: "Code", key: "code" }, { header: "Customer", key: "name" }, { header: "Phone", key: "phone" },
+        { header: "0–30", key: "b0_30", align: "right", money: true }, { header: "31–60", key: "b31_60", align: "right", money: true },
+        { header: "61–90", key: "b61_90", align: "right", money: true }, { header: "90+", key: "b90p", align: "right", money: true },
+        { header: "Total", key: "total", align: "right", money: true },
+      ],
+      rows,
+      totals: { code: "Total", b0_30: sum("b0_30"), b31_60: sum("b31_60"), b61_90: sum("b61_90"), b90p: sum("b90p"), total: sum("total") },
+    };
+    return sendReport(res, fmtReq(req), "receivables-aging", doc, await loadSettings(), { buckets: doc.totals });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** GET /reports/payables[&format] — vendor payable aging */
+router.get("/payables", requirePermission("reports.view"), async (req, res, next) => {
+  try {
+    const vendors = await prisma.vendor.findMany({ where: { balance: { gt: 0 } }, select: { id: true, code: true, name: true, phone: true, balance: true, openingBalance: true, createdAt: true }, orderBy: { balance: "desc" } });
+    const purchases = await prisma.purchase.findMany({ where: { vendorId: { in: vendors.map((v) => v.id) }, status: "RECEIVED", isReturn: false, dueAmount: { gt: 0 } }, select: { vendorId: true, date: true, dueAmount: true } });
+    const byVend = new Map<string, { date: Date; amount: number }[]>();
+    for (const v of vendors) byVend.set(v.id, num(v.openingBalance) > 0 ? [{ date: v.createdAt, amount: num(v.openingBalance) }] : []);
+    for (const p of purchases) byVend.get(p.vendorId)?.push({ date: p.date, amount: num(p.dueAmount) });
+
+    const rows = vendors.map((v) => { const a = agingBuckets(num(v.balance), byVend.get(v.id) ?? []); return { code: v.code, name: v.name, phone: v.phone ?? "", ...a, total: num(v.balance) }; });
+    const sum = (k: string) => r2(rows.reduce((a, r) => a + (r as any)[k], 0));
+    const doc: ReportDoc = {
+      title: "Payables Aging",
+      meta: [{ label: "As of", value: new Date().toLocaleDateString("en-GB") }],
+      columns: [
+        { header: "Code", key: "code" }, { header: "Vendor", key: "name" }, { header: "Phone", key: "phone" },
+        { header: "0–30", key: "b0_30", align: "right", money: true }, { header: "31–60", key: "b31_60", align: "right", money: true },
+        { header: "61–90", key: "b61_90", align: "right", money: true }, { header: "90+", key: "b90p", align: "right", money: true },
+        { header: "Total", key: "total", align: "right", money: true },
+      ],
+      rows,
+      totals: { code: "Total", b0_30: sum("b0_30"), b31_60: sum("b31_60"), b61_90: sum("b61_90"), b90p: sum("b90p"), total: sum("total") },
+    };
+    return sendReport(res, fmtReq(req), "payables-aging", doc, await loadSettings());
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─────────────────────────── EXPENSES & PAYMENT-METHOD ───────────────────────────
+
+/** GET /reports/expenses?from&to[&format] — expenses by category */
+router.get("/expenses", requirePermission("reports.view"), async (req, res, next) => {
+  try {
+    const { from, to, meta } = periodOf(req);
+    const grouped = await prisma.expense.groupBy({ by: ["categoryId"], _sum: { amount: true }, _count: true, where: { date: { gte: from, lte: to } } });
+    const cats = await prisma.expenseCategory.findMany({ where: { id: { in: grouped.map((g) => g.categoryId) } }, select: { id: true, name: true } });
+    const catName = new Map(cats.map((c) => [c.id, c.name]));
+    const rows = grouped.map((g) => ({ category: catName.get(g.categoryId) ?? "—", count: g._count, amount: num(g._sum.amount) })).sort((a, b) => b.amount - a.amount);
+    const doc: ReportDoc = {
+      title: "Expenses by Category",
+      meta,
+      columns: [{ header: "Category", key: "category" }, { header: "Count", key: "count", align: "right" }, { header: "Amount", key: "amount", align: "right", money: true }],
+      rows,
+      totals: { category: "Total", count: rows.reduce((a, r) => a + r.count, 0), amount: r2(rows.reduce((a, r) => a + r.amount, 0)) },
+    };
+    return sendReport(res, fmtReq(req), "expenses-by-category", doc, await loadSettings());
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** GET /reports/sales-by-payment-method?from&to[&format] (G10) */
+router.get("/sales-by-payment-method", requirePermission("reports.view"), async (req, res, next) => {
+  try {
+    const { from, to, meta } = periodOf(req);
+    const grouped = await prisma.payment.groupBy({ by: ["methodId"], _sum: { amount: true }, _count: true, where: { type: "SALE_RECEIPT", date: { gte: from, lte: to } } });
+    const methods = await prisma.paymentMethod.findMany({ where: { id: { in: grouped.map((g) => g.methodId) } }, select: { id: true, name: true } });
+    const mName = new Map(methods.map((m) => [m.id, m.name]));
+    const rows = grouped.map((g) => ({ method: mName.get(g.methodId) ?? "—", count: g._count, amount: num(g._sum.amount) })).sort((a, b) => b.amount - a.amount);
+    const doc: ReportDoc = {
+      title: "Sales by Payment Method",
+      meta,
+      columns: [{ header: "Account / method", key: "method" }, { header: "Payments", key: "count", align: "right" }, { header: "Amount", key: "amount", align: "right", money: true }],
+      rows,
+      totals: { method: "Total", count: rows.reduce((a, r) => a + r.count, 0), amount: r2(rows.reduce((a, r) => a + r.amount, 0)) },
+    };
+    return sendReport(res, fmtReq(req), "sales-by-payment-method", doc, await loadSettings());
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─────────────────────────── STOCK MOVEMENTS ───────────────────────────
+
+/** GET /reports/stock-movements?from&to&productId[&format] */
+router.get("/stock-movements", requirePermission("reports.view"), async (req, res, next) => {
+  try {
+    const { from, to, meta } = periodOf(req);
+    const productId = String(req.query.productId ?? "");
+    const moves = await prisma.stockMovement.findMany({
+      where: { date: { gte: from, lte: to }, ...(productId ? { productId } : {}) },
+      select: { date: true, type: true, qty: true, balance: true, notes: true, product: { select: { name: true, sku: true } } },
+      orderBy: { date: "asc" },
+      take: 5000,
+    });
+    const rows = moves.map((m) => ({ date: m.date.toLocaleDateString("en-GB"), product: `${m.product.name} (${m.product.sku})`, type: m.type.replace("_", " "), qty: num(m.qty), balance: num(m.balance), notes: m.notes ?? "" }));
+    const doc: ReportDoc = {
+      title: "Stock Movements",
+      meta,
+      columns: [{ header: "Date", key: "date" }, { header: "Product", key: "product" }, { header: "Type", key: "type" }, { header: "Qty", key: "qty", align: "right" }, { header: "Balance", key: "balance", align: "right" }, { header: "Note", key: "notes" }],
+      rows,
+    };
+    return sendReport(res, fmtReq(req), "stock-movements", doc, await loadSettings());
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─────────────────────────── DASHBOARD ───────────────────────────
+
+/** GET /reports/dashboard — KPI cards + chart series */
+router.get("/dashboard", requirePermission("reports.view", "sales.view_own"), async (req, res, next) => {
+  try {
+    const canProfit = await roleHasPermission(req.user!.role, "reports.profit");
+    const todayStart = startOfToday();
+    const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+    const win = new Date(); win.setDate(win.getDate() - 29); win.setHours(0, 0, 0, 0);
+
+    const [todayAgg, monthAgg, recv, pay, accounts, lowStock, series, catItems, prodItems] = await Promise.all([
+      prisma.sale.aggregate({ _sum: { grandTotal: true, profit: true }, where: { status: "COMPLETED", isReturn: false, date: { gte: todayStart } } }),
+      prisma.sale.aggregate({ _sum: { grandTotal: true, profit: true }, where: { status: "COMPLETED", isReturn: false, date: { gte: monthStart } } }),
+      prisma.customer.aggregate({ _sum: { balance: true }, where: { balance: { gt: 0 } } }),
+      prisma.vendor.aggregate({ _sum: { balance: true }, where: { balance: { gt: 0 } } }),
+      prisma.paymentMethod.findMany({ where: { isActive: true }, select: { currentBalance: true, isCash: true } }),
+      prisma.product.count({ where: { isActive: true, type: "STANDARD", minStockLevel: { gt: 0 }, stockQty: { lte: prisma.product.fields.minStockLevel } } }),
+      prisma.sale.findMany({ where: { status: "COMPLETED", isReturn: false, date: { gte: win } }, select: { date: true, grandTotal: true, profit: true } }),
+      prisma.saleItem.findMany({ where: { sale: { status: "COMPLETED", isReturn: false, date: { gte: win } } }, select: { total: true, product: { select: { category: { select: { name: true } } } } } }),
+      prisma.saleItem.findMany({ where: { sale: { status: "COMPLETED", isReturn: false, date: { gte: win } } }, select: { total: true, qty: true, product: { select: { name: true } } } }),
+    ]);
+
+    // 30-day series (fill gaps). Bucket by LOCAL date on both sides so today lands
+    // in today's bucket regardless of the server's timezone offset.
+    const dayKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const dayMap = new Map<string, { sales: number; profit: number }>();
+    for (let i = 0; i < 30; i++) { const d = new Date(win); d.setDate(win.getDate() + i); dayMap.set(dayKey(d), { sales: 0, profit: 0 }); }
+    for (const s of series) { const e = dayMap.get(dayKey(new Date(s.date))); if (e) { e.sales = r2(e.sales + num(s.grandTotal)); e.profit = r2(e.profit + num(s.profit)); } }
+    const salesSeries = [...dayMap.entries()].map(([date, v]) => ({ date, sales: v.sales, ...(canProfit ? { profit: v.profit } : {}) }));
+
+    // category share
+    const catMap = new Map<string, number>();
+    for (const it of catItems) { const n = it.product?.category?.name ?? "Other"; catMap.set(n, r2((catMap.get(n) ?? 0) + num(it.total))); }
+    const categoryShare = [...catMap.entries()].map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 6);
+
+    // top products
+    const prodMap = new Map<string, number>();
+    for (const it of prodItems) { const n = it.product?.name ?? "—"; prodMap.set(n, r2((prodMap.get(n) ?? 0) + num(it.total))); }
+    const topProducts = [...prodMap.entries()].map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 5);
+
+    const cash = r2(accounts.reduce((s, a) => s + num(a.currentBalance), 0));
+
+    res.json({
+      ok: true,
+      data: {
+        cards: {
+          todaySales: money(num(todayAgg._sum.grandTotal)),
+          monthSales: money(num(monthAgg._sum.grandTotal)),
+          receivables: money(num(recv._sum.balance)),
+          payables: money(num(pay._sum.balance)),
+          cash: money(cash),
+          lowStock,
+          ...(canProfit ? { todayProfit: money(num(todayAgg._sum.profit)), monthProfit: money(num(monthAgg._sum.profit)) } : {}),
+        },
+        salesSeries,
+        categoryShare,
+        topProducts,
+        canProfit,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
 
 export default router;

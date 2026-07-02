@@ -59,12 +59,13 @@ Tick things off as we build. Mirrors the phases in 01-BUILD-PLAN.md.
 - [x] G6 HR extensions — Department, Shift, Holiday, LeaveRequest (approve/reject) — lightweight, one section each on the Employees → HR tab
 - Note: sales & purchases retrofitted to post every payment through the account ledger; fixed a sale-return+cash-refund double-credit (refund now offsets the credit note). Verified end-to-end, test data cleaned, counters reset to 0001.
 
-## Phase 5 — Reports
-- [ ] Sales · Purchases · P&L · Stock valuation · Movements
-- [ ] Receivables aging · Payables · Expenses · Cash book
-- [ ] PDF download on all  ·  [ ] Excel download on all
-- [ ] Dashboard cards + charts
-- [ ] G10 Valuation at sale price variant · Sales by payment method · re-run price-volatility test
+## Phase 5 — Reports  (completed 2026-07-02)
+- [x] Sales register · Purchase register · **Profit & Loss** · Stock valuation · Stock movements (server-side, rebuilt from ledgers)
+- [x] Receivables aging · Payables aging · Expenses by category · Cash book (FIFO aging into 0–30/31–60/61–90/90+ buckets)
+- [x] PDF download on all · [x] Excel download on all — one generic `ReportDoc` drives JSON + pdfmake PDF + exceljs Excel (`lib/report-export.ts`, `sendReport`)
+- [x] Dashboard cards + premium Recharts (30-day gradient area sales+profit, category donut, top-products bar, receivables-aging bar); low-stock badge; profit gated by `reports.profit`
+- [x] G10 Valuation at **sale-price** variant · **Sales by payment method** report · price-volatility + P&L acceptance (docs/09 §8) **re-run: 31/31 pass, integrity all-green, balance sheet ₨0**
+- Fix: balance sheet now recognises inventory **revaluation** (manual cost edits + weighted-avg rounding) in retained earnings → Assets = Liabilities + Equity exactly through price changes. Fixed a dashboard timezone bug (day buckets now use local dates so today's sales appear).
 
 ## Phase 6 — Admin
 - [ ] Users & roles UI  ·  [ ] Permission enforcement tested per role

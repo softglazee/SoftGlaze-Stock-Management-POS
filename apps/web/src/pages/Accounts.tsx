@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Pencil, FileText, ArrowLeftRight, Landmark, Wallet, Banknote, ShieldCheck, CheckCircle2, XCircle, Printer } from "lucide-react";
-import { api, ApiError } from "../lib/api";
+import { Plus, Pencil, FileText, ArrowLeftRight, Landmark, Wallet, Banknote, ShieldCheck, CheckCircle2, XCircle, Printer, Sheet } from "lucide-react";
+import { api, download, ApiError } from "../lib/api";
 import { Account, AccountStatement, Cashbook, BalanceSheet, IntegrityReport } from "../lib/types";
 import { num, fmtMoney } from "../lib/format";
 import { useAuth } from "../context/AuthContext";
@@ -268,9 +268,10 @@ function CashbookTab() {
       <div className="flex flex-wrap items-end gap-2">
         <div><label className="label">From</label><input type="date" className="input !w-40" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
         <div><label className="label">To</label><input type="date" className="input !w-40" value={to} onChange={(e) => setTo(e.target.value)} /></div>
-        <div className="flex gap-1.5">
-          <button className="btn btn-secondary" onClick={() => { setFrom(today); setTo(today); }}>Today</button>
-        </div>
+        <button className="btn btn-secondary" onClick={() => { setFrom(today); setTo(today); }}>Today</button>
+        <div className="flex-1" />
+        <button className="btn btn-secondary" onClick={() => download(`/reports/cashbook?${params}&format=pdf`, "cash-book.pdf")} disabled={!data}><Printer size={15} /> PDF</button>
+        <button className="btn btn-secondary" onClick={() => download(`/reports/cashbook?${params}&format=xlsx`, "cash-book.xlsx")} disabled={!data}><Sheet size={15} /> Excel</button>
       </div>
       <div className="card overflow-hidden">
         {isLoading ? (

@@ -20,6 +20,7 @@ import Accounts from "./pages/Accounts";
 import Payments from "./pages/Payments";
 import Expenses from "./pages/Expenses";
 import Employees from "./pages/Employees";
+import Reports from "./pages/Reports";
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -91,7 +92,7 @@ export default function App() {
         <Route path="/payments" element={<Payments />} />
         <Route path="/expenses" element={<Expenses />} />
         <Route path="/employees" element={<Employees />} />
-        <Route path="/reports" element={<ComingSoon title="Reports" phase="Phase 5" />} />
+        <Route path="/reports" element={<Reports />} />
         <Route path="/settings" element={<ComingSoon title="Settings" phase="Phase 6" />} />
       </Route>
 

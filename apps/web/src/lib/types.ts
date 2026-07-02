@@ -361,6 +361,26 @@ export type BalanceSheet = {
 export type IntegrityCheck = { name: string; ok: boolean; detail: string };
 export type IntegrityReport = { allGreen: boolean; checks: IntegrityCheck[]; balanceSheet: BalanceSheet };
 
+// ── Generic report table (JSON that also drives PDF/Excel) ──
+export type ReportColumn = { header: string; key: string; align?: "left" | "right"; money?: boolean };
+export type ReportTable = {
+  title: string;
+  subtitle?: string;
+  meta?: { label: string; value: string }[];
+  columns: ReportColumn[];
+  rows: Record<string, string | number | null>[];
+  totals?: Record<string, string | number | null>;
+};
+
+// ── Dashboard ──
+export type DashboardData = {
+  cards: { todaySales: string; monthSales: string; receivables: string; payables: string; cash: string; lowStock: number; todayProfit?: string; monthProfit?: string };
+  salesSeries: { date: string; sales: number; profit?: number }[];
+  categoryShare: { name: string; value: number }[];
+  topProducts: { name: string; value: number }[];
+  canProfit: boolean;
+};
+
 export type BusinessPresetInfo = {
   key: string;
   label: string;

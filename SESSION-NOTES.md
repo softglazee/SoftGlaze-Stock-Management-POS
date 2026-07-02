@@ -3,7 +3,21 @@
 > Living hand-off file. Updated after every module or mid-task stop.
 > Read this at the start of every session (see CLAUDE.md → Grounding & session continuity rules).
 
-## Current status (2026-07-02) — Phase 4 COMPLETE ✅ (Money)
+## Current status (2026-07-02) — Phase 5 COMPLETE ✅ (Reports & Dashboard)
+
+No schema change. Both apps typecheck clean; backend verified 31/31 (P&L acceptance docs/09 §8 + price-volatility re-run + every report JSON/PDF/Excel + integrity all-green, balance sheet imbalance ₨0); web smoke-tested (dashboard charts render, Reports page renders P&L ₨51,450 with PDF/Excel, 0 console errors). Test data cleaned; counters reset.
+
+**Server:** `lib/report-export.ts` — one `ReportDoc {title, meta, columns, rows, totals}` → JSON (web renders) / PDF (pdfmake, built-in Helvetica, money as "Rs " ASCII) / Excel (exceljs); `sendReport(res, format, name, doc, settings)`. `reports.routes.ts` gained: `/profit-loss` (reports.profit), `/sales`, `/purchases`, `/stock-valuation?basis=cost|sale` (cost gated by reports.profit), `/receivables` + `/payables` (FIFO aging buckets), `/expenses`, `/sales-by-payment-method` (G10), `/stock-movements`, `/dashboard` (KPIs + 30-day series + category share + top products); `/cashbook` gained format export. All accept `?format=pdf|xlsx`, else JSON `{report,...}`.
+
+**Balance-sheet fix (accounting):** retained earnings now adds `revaluation = stockValue − Σ(stockMovement.qty×unitCost)`, which captures manual cost-price edits and weighted-avg rounding. Algebra: the stock term cancels, so Assets=Liab+Equity holds exactly for any price sequence (verified imbalance ₨0 after the volatility edit). **Dashboard TZ fix:** 30-day buckets use LOCAL date keys (`getFullYear/Month/Date`) on both sides so today's sales land in today's bucket (was UTC-shifted → chart looked flat).
+
+**Web:** `pages/Dashboard.tsx` — KPI cards (profit gated) + Recharts (gradient area, donut, bars) with CSS-var colors + custom tooltips + skeletons/empty states. `pages/Reports.tsx` — left nav of 9 reports + generic `ReportView` (date/basis filters, table from report.columns/rows/totals, PDF/Excel via `download()`). Cash Book tab on Accounts got PDF/Excel buttons. types.ts: `ReportTable`, `DashboardData`. Route `/reports` live (was ComingSoon). recharts/pdfmake/exceljs already installed.
+
+**Next (Phase 6 — Admin):** users & roles UI, SUPER_ADMIN global settings (shop profile A1 full UI, business type, logo/invoice header-footer), A2 permission-matrix editor, Integrations (SMTP test email + WhatsApp wa.me on sale/purchase + debt reminders), notification bell + reminders center, G8 message-template editor, G9 currency switcher, audit-log viewer, backup/restore. Do NOT start without the owner's "go".
+
+---
+
+## Phase 4 COMPLETE ✅ (Money)
 
 Migration `20260702094348_phase4_money_accounts_hr`. Both apps typecheck clean; backend money-math verified (25/25 assertions), `GET /reports/integrity` all-green incl. balance sheet imbalance ₨0; web smoke-tested (Accounts/Payments/Expenses/Employees render, 0 console errors, Integrity tab shows all-green live). Test data cleaned; counters reset to 0001; only the 3 onboarding "(sample)" products remain.
 
