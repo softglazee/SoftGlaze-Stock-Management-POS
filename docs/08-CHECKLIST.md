@@ -18,30 +18,52 @@ Tick things off as we build. Mirrors the phases in 01-BUILD-PLAN.md.
 - [x] Products CRUD + image upload (webp + thumbnail) + SKU auto (CEM-0001 style) + opening stock via ledger
 - [x] Customers CRUD  ·  [x] Vendors CRUD (codes CUS-/VEN-, opening balances, delete-protection when balance ≠ 0)
 
+### Phase 1 upgrades (docs/11 A + docs/12 G — added 2026-07-02)
+- [ ] A1 Shop Profile foundation (settings service + logo pipeline; full UI in Phase 6)
+- [ ] A2 Permission keys + `requirePermission` middleware (matrix editor UI in Phase 6)
+- [ ] A3 Bulk product import wizard (CSV/Excel/XML/TXT/paste, mapping templates, dry-run) + product export
+- [ ] A4 `<ImageDropzone>` global drag-drop uploader (products/categories/employees/logo)
+- [ ] G2 Brands (model + product filter + import column)
+- [ ] G3 Product types STANDARD / SERVICE / COMBO (combo stock logic lands in Phase 2)
+- [ ] G7 Import wizard targets: Customers + Vendors (opening balances as proper entries)
+- [ ] G10 Product dimensions fields · favicon + page title in branding
+
 ## Phase 2 — Purchasing & stock
 - [ ] Purchase entry → stock in + weighted avg cost
 - [ ] Stock adjustments  ·  [ ] Purchase returns
 - [ ] Low stock alerts
+- [ ] A7 Medical Store preset + generic batch/expiry FEFO (`track_batches` flag)
+- [ ] G3 Combo stock logic (selling a combo deducts component stock at snapshot costs)
 
 ## Phase 3 — POS
-- [ ] POS screen (search, tiles, cart)
+- [ ] POS screen exactly per docs/11 A5 (quick-add customer, quick keys, split pay, success screen)
 - [ ] Cash / credit / split payments
 - [ ] Thermal receipt + A4 PDF invoice
 - [ ] Hold/resume  ·  [ ] Sales returns  ·  [ ] Quotations
+- [ ] G4 Warranty/guarantee fields + invoice print + report
+- [ ] G5 Camera barcode scanner + weighing scale (feature-flagged)
+- [ ] A6 Demo data pack (`db:seed:demo`) + P&L proof + docs/12 price-volatility acceptance test
 
 ## Phase 4 — Money
 - [ ] Customer receipts  ·  [ ] Vendor payments
 - [ ] Ledgers/statements  ·  [ ] Expenses  ·  [ ] Day close
+- [ ] G1 Accounts & fund transfers (account balances, TRN- transfers, deposits/drawings, balance sheet + integrity check)
+- [ ] G6 HR extensions (departments, shifts, leave requests, holidays)
 
 ## Phase 5 — Reports
 - [ ] Sales · Purchases · P&L · Stock valuation · Movements
 - [ ] Receivables aging · Payables · Expenses · Cash book
 - [ ] PDF download on all  ·  [ ] Excel download on all
 - [ ] Dashboard cards + charts
+- [ ] G10 Valuation at sale price variant · Sales by payment method · re-run price-volatility test
 
 ## Phase 6 — Admin
 - [ ] Users & roles UI  ·  [ ] Permission enforcement tested per role
 - [ ] Settings (logo, tax, invoice footer)  ·  [ ] Audit log  ·  [ ] Backup/restore
+- [ ] A1 Shop Profile full UI with live invoice preview
+- [ ] A2 Roles & Permissions matrix editor (SUPER_ADMIN)
+- [ ] G8 Message template editor (+ SMS gateway interface, shipped disabled)
+- [ ] G9 Display-currency switcher (books stay PKR)
 
 ## Phase 7 — Desktop
 - [ ] Electron runs app  ·  [ ] Windows installer built  ·  [ ] Tested on shop PC

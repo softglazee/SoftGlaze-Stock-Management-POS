@@ -15,8 +15,11 @@ This file is the contract for every session. When in doubt, this file + `docs/` 
 
 1. This file
 2. `docs/01-BUILD-PLAN.md` — the phase roadmap (source of truth for what's next)
-3. The doc for the module being built (`docs/04-FEATURES.md`, `docs/09-EXTENDED-FEATURES.md`, `docs/05-API-REFERENCE.md`, `docs/06-UI-DESIGN-SYSTEM.md`)
-4. `docs/08-CHECKLIST.md` — tick items off as they're completed (edit the file)
+3. `docs/11-SCOPE-UPGRADES.md` **Section A** and `docs/12-GAP-CLOSURE.md` — CORE scope
+   merged into the main phases (A1–A7, G1–G10 + the price-volatility guarantee)
+4. The doc for the module being built (`docs/04-FEATURES.md`, `docs/09-EXTENDED-FEATURES.md`, `docs/05-API-REFERENCE.md`, `docs/06-UI-DESIGN-SYSTEM.md`)
+5. `docs/08-CHECKLIST.md` — tick items off as they're completed (edit the file)
+6. `docs/10-FUTURE-ROADMAP.md` + docs/11 Section B — post-Phase-9 features only (do NOT build early)
 
 ## Non-negotiable engineering rules
 
@@ -62,7 +65,15 @@ The owner has MCP servers installed (design MCPs, codebase MCP, possibly others)
 
 ## Feature scope (v1 + v2 combined)
 
-Everything in `docs/04-FEATURES.md` PLUS `docs/09-EXTENDED-FEATURES.md`:
+Everything in `docs/04-FEATURES.md` PLUS `docs/09-EXTENDED-FEATURES.md` PLUS
+`docs/11-SCOPE-UPGRADES.md` Section A (A1 shop profile, A2 dynamic permission matrix,
+A3 bulk import/export wizard, A4 drag-drop uploader, A5 definitive POS spec, A6 demo
+data pack with P&L proof, A7 medical preset with batch/expiry FEFO) PLUS
+`docs/12-GAP-CLOSURE.md` G1–G10 (accounts & transfers & balance sheet, brands,
+service/combo product types, warranty, scanner/scale flags, HR extensions,
+customer/vendor import, template editor, display-currency switcher, parity items).
+**Hard requirement:** the price-volatility guarantee at the top of docs/12 —
+snapshots rule all reports; past reports never change when prices change.
 - Business Type presets (Building Materials, Kiryana/General Store, Electronics, Clothing, Pharmacy, Hardware, Custom) — seeds categories/units per type, selected in onboarding/Settings; core stays generic.
 - Employees & Salaries (employee profiles with photos, monthly salary payment with bonus/deduction/advance, auto-Expense, one salary per employee per month).
 - Expenses incl. Miscellaneous, rent, electricity, transport — all feeding P&L.

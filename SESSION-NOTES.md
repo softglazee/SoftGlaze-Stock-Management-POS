@@ -38,6 +38,14 @@
   (demonstrates thumbnails; sample products are meant to be deleted by the owner anyway).
 - DB does not auto-start on reboot → `scripts\start-db.ps1` first (portable Postgres, no admin rights).
 
-**Exact next step:** Wait for owner's confirmation of Phase 1, then Phase 2 per KICKOFF-PROMPT.md:
-Purchases (pay-later/udhaar to vendors first-class), stock ledger, weighted-average cost,
-adjustments, purchase returns, low-stock alerts.
+**Scope change discovered mid-session:** the owner added `docs/10-FUTURE-ROADMAP.md`,
+`docs/11-SCOPE-UPGRADES.md` and `docs/12-GAP-CLOSURE.md` to the repo while Phase 1 was being
+built. Per docs/11's own instructions, CLAUDE.md (read order + feature scope) and
+docs/08-CHECKLIST.md were updated to merge A1–A7 and G1–G10 into their phases. The
+price-volatility guarantee (docs/12 top) is now a recorded hard requirement.
+
+**Exact next step:** Owner to confirm. Remaining *Phase 1 upgrade* items (new, unchecked in
+checklist): A1 settings foundation, A2 permission middleware, A3 bulk product import wizard +
+export, A4 ImageDropzone, G2 brands, G3 product types (STANDARD/SERVICE/COMBO), G7
+customer/vendor import, G10 dimensions + favicon. Build those before Phase 2, then Phase 2
+per KICKOFF-PROMPT.md + A7 (medical preset, batches) + G3 combo stock.
