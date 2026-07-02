@@ -4,6 +4,12 @@ import Layout from "./components/Layout";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
+import Onboarding from "./pages/Onboarding";
+import Units from "./pages/Units";
+import Categories from "./pages/Categories";
+import Products from "./pages/Products";
+import Customers from "./pages/Customers";
+import Vendors from "./pages/Vendors";
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -34,6 +40,14 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route
+        path="/onboarding"
+        element={
+          <Protected>
+            <Onboarding />
+          </Protected>
+        }
+      />
 
       <Route
         element={
@@ -45,11 +59,12 @@ export default function App() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/pos" element={<ComingSoon title="POS / New Sale" phase="Phase 3" />} />
         <Route path="/sales" element={<ComingSoon title="Sales" phase="Phase 3" />} />
-        <Route path="/products" element={<ComingSoon title="Products" phase="Phase 1" />} />
-        <Route path="/categories" element={<ComingSoon title="Categories" phase="Phase 1" />} />
+        <Route path="/products" element={<Products />} />
+        <Route path="/categories" element={<Categories />} />
+        <Route path="/units" element={<Units />} />
         <Route path="/purchases" element={<ComingSoon title="Purchases" phase="Phase 2" />} />
-        <Route path="/customers" element={<ComingSoon title="Customers" phase="Phase 1" />} />
-        <Route path="/vendors" element={<ComingSoon title="Vendors" phase="Phase 1" />} />
+        <Route path="/customers" element={<Customers />} />
+        <Route path="/vendors" element={<Vendors />} />
         <Route path="/payments" element={<ComingSoon title="Payments" phase="Phase 4" />} />
         <Route path="/expenses" element={<ComingSoon title="Expenses" phase="Phase 4" />} />
         <Route path="/employees" element={<ComingSoon title="Employees & Salaries" phase="Phase 4" />} />

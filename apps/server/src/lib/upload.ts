@@ -1,0 +1,53 @@
+import multer from "multer";
+import sharp from "sharp";
+import path from "path";
+import fs from "fs/promises";
+import crypto from "crypto";
+
+const UPLOAD_ROOT = path.join(process.cwd(), process.env.UPLOAD_DIR ?? "uploads");
+
+/** Multer instance for image uploads (memory → sharp → webp on disk) */
+export const imageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, files: 6 },
+  fileFilter: (_req, file, cb) => {
+    if (/^image\/(png|jpe?g|webp|gif|avif)$/i.test(file.mimetype)) cb(null, true);
+    else cb(new Error("Only image files (jpg, png, webp) are allowed"));
+  },
+});
+
+/**
+ * Persists an uploaded image as webp (max 1200px) + 300px thumbnail.
+ * Returns web paths like /uploads/products/ab12cd34.webp
+ */
+export async function saveImage(buffer: Buffer, folder: string) {
+  const dir = path.join(UPLOAD_ROOT, folder);
+  await fs.mkdir(dir, { recursive: true });
+  const name = crypto.randomBytes(8).toString("hex");
+
+  await sharp(buffer)
+    .rotate()
+    .resize({ width: 1200, height: 1200, fit: "inside", withoutEnlargement: true })
+    .webp({ quality: 82 })
+    .toFile(path.join(dir, `${name}.webp`));
+
+  await sharp(buffer)
+    .rotate()
+    .resize({ width: 300, height: 300, fit: "inside", withoutEnlargement: true })
+    .webp({ quality: 75 })
+    .toFile(path.join(dir, `${name}.thumb.webp`));
+
+  return {
+    path: `/uploads/${folder}/${name}.webp`,
+    thumbPath: `/uploads/${folder}/${name}.thumb.webp`,
+  };
+}
+
+/** Best-effort removal of stored image files (never throws) */
+export async function deleteImageFiles(...relPaths: (string | null | undefined)[]) {
+  for (const rel of relPaths) {
+    if (!rel) continue;
+    const abs = path.join(process.cwd(), rel.replace(/^\//, ""));
+    await fs.unlink(abs).catch(() => {});
+  }
+}

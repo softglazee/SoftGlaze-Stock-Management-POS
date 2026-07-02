@@ -12,10 +12,11 @@ Tick things off as we build. Mirrors the phases in 01-BUILD-PLAN.md.
 - [x] npm run dev → API health OK, login page loads, dark/light toggle works (verified in browser at 1440px & 375px)
 
 ## Phase 1 — Master data
-- [ ] Categories CRUD + sub-categories
-- [ ] Units + conversions
-- [ ] Products CRUD + image upload + SKU auto
-- [ ] Customers CRUD  ·  [ ] Vendors CRUD
+- [x] Business Type presets + first-run onboarding screen (seeds categories/units/sample products)
+- [x] Categories CRUD + sub-categories (+ optional images)
+- [x] Units + conversions (1 t = 1000 kg verified)
+- [x] Products CRUD + image upload (webp + thumbnail) + SKU auto (CEM-0001 style) + opening stock via ledger
+- [x] Customers CRUD  ·  [x] Vendors CRUD (codes CUS-/VEN-, opening balances, delete-protection when balance ≠ 0)
 
 ## Phase 2 — Purchasing & stock
 - [ ] Purchase entry → stock in + weighted avg cost

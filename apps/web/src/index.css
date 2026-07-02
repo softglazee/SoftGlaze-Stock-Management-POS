@@ -132,6 +132,14 @@ h1, h2, h3, .display {
 
 .btn-danger { background: var(--danger); color: #fff; }
 
+/* Data tables stay readable on phones: card scrolls sideways instead of crushing columns */
+.card:has(> table) {
+  overflow-x: auto;
+}
+.card > table {
+  min-width: 640px;
+}
+
 .label {
   display: block;
   font-size: 13px;

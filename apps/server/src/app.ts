@@ -4,6 +4,12 @@ import helmet from "helmet";
 import path from "path";
 import rateLimit from "express-rate-limit";
 import authRoutes from "./routes/auth.routes";
+import unitRoutes from "./routes/units.routes";
+import categoryRoutes from "./routes/categories.routes";
+import settingRoutes from "./routes/settings.routes";
+import productRoutes from "./routes/products.routes";
+import customerRoutes from "./routes/customers.routes";
+import vendorRoutes from "./routes/vendors.routes";
 
 const app = express();
 
@@ -26,11 +32,13 @@ app.get("/api/v1/health", (_req, res) => res.json({ ok: true, data: { status: "u
 
 app.use("/api/v1/auth", authLimiter, authRoutes);
 
-// ── Module routes get mounted here as we build each phase ──
-// app.use("/api/v1/categories", categoryRoutes);   // Phase 1
-// app.use("/api/v1/products", productRoutes);      // Phase 1
-// app.use("/api/v1/customers", customerRoutes);    // Phase 1
-// app.use("/api/v1/vendors", vendorRoutes);        // Phase 1
+// ── Module routes (mounted as each phase lands) ──
+app.use("/api/v1/units", unitRoutes);            // Phase 1
+app.use("/api/v1/categories", categoryRoutes);   // Phase 1
+app.use("/api/v1/settings", settingRoutes);      // Phase 1 (presets) — grows in Phase 6
+app.use("/api/v1/products", productRoutes);      // Phase 1
+app.use("/api/v1/customers", customerRoutes);    // Phase 1
+app.use("/api/v1/vendors", vendorRoutes);        // Phase 1
 // app.use("/api/v1/purchases", purchaseRoutes);    // Phase 2
 // app.use("/api/v1/sales", saleRoutes);            // Phase 3
 // app.use("/api/v1/payments", paymentRoutes);      // Phase 4
