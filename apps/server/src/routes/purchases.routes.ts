@@ -6,6 +6,7 @@ import { requireAuth } from "../middleware/auth";
 import { requirePermission } from "../middleware/permission";
 import { nextNumber } from "../utils/counter";
 import { applyMovement, weightedAvg, InsufficientStockError } from "../lib/stock";
+import { postPayment } from "../lib/accounts";
 
 const router = Router();
 router.use(requireAuth);
@@ -160,10 +161,7 @@ router.post("/", requirePermission("purchases.create"), async (req, res, next) =
       if (dueAmount !== 0) await tx.vendor.update({ where: { id: vendor.id }, data: { balance: { increment: money(dueAmount) } } });
 
       for (const p of body.payments ?? []) {
-        const refNo = await nextNumber(tx, "payment", "PAY");
-        await tx.payment.create({
-          data: { refNo, type: "PURCHASE_PAYMENT", methodId: p.methodId, amount: money(p.amount), vendorId: vendor.id, purchaseId: created.id, userId: req.user!.id, notes: `Payment for ${invoiceNo}` },
-        });
+        await postPayment(tx, { type: "PURCHASE_PAYMENT", methodId: p.methodId, amount: p.amount, vendorId: vendor.id, purchaseId: created.id, userId: req.user!.id, notes: `Payment for ${invoiceNo}` });
       }
 
       await tx.auditLog.create({ data: { userId: req.user!.id, action: "CREATE_PURCHASE", entity: "Purchase", entityId: created.id, details: `${invoiceNo} · ${vendor.name} · ₨${grandTotal}` } });

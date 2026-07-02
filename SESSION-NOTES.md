@@ -3,7 +3,26 @@
 > Living hand-off file. Updated after every module or mid-task stop.
 > Read this at the start of every session (see CLAUDE.md → Grounding & session continuity rules).
 
-## Current status (2026-07-02) — Phase 3 CORE COMPLETE ✅ (POS & Sales)
+## Current status (2026-07-02) — Phase 4 COMPLETE ✅ (Money)
+
+Migration `20260702094348_phase4_money_accounts_hr`. Both apps typecheck clean; backend money-math verified (25/25 assertions), `GET /reports/integrity` all-green incl. balance sheet imbalance ₨0; web smoke-tested (Accounts/Payments/Expenses/Employees render, 0 console errors, Integrity tab shows all-green live). Test data cleaned; counters reset to 0001; only the 3 onboarding "(sample)" products remain.
+
+**Schema (new):** PaymentMethod upgraded to a money **Account** (accountNo, bankName, openingBalance, currentBalance cache, sortOrder). New models: `AccountEntry` (signed money ledger — source of truth for currentBalance), `FundTransfer` (TRN-), `CapitalEntry` (CAP-/DRW-, direction CAPITAL_IN/DRAWING). G6 HR: `Department`, `Shift`, `LeaveRequest` (LeaveType/LeaveStatus), `Holiday`; Employee got departmentId/shiftId. Enums `AccountEntryType`, `CapitalDirection`. Permission keys added: `accounts.view`, `accounts.manage`.
+
+**Server (new):** `lib/accounts.ts` (`postToAccount` — appends AccountEntry + updates currentBalance; `postPayment` — creates Payment AND posts to account; `paymentSign`). Routes: `accounts.routes.ts` (account CRUD, /:id/statement, /transfer, /capital, transfers & capital lists), `payments.routes.ts` (customer-receipt, vendor-payment, list), `ledger.routes.ts` (customer/vendor running-balance statements), `expenses.routes.ts` (expenses + categories; delete reverses account effect; salary expenses blocked), `employees.routes.ts` (Employee CRUD + photo + Pay Salary atomic + salary reversal + /salaries list), `hr.routes.ts` (departments/shifts/holidays/leaves), `reports.routes.ts` (`/integrity`, `/balance-sheet`, `/cashbook`). Retrofitted `sales.routes.ts` + `purchases.routes.ts` to route every Payment through `postPayment`. **Fixed** sale-return + cash-refund double-credit (refund now offsets the credit note; net balance change 0 when refunded).
+
+**Web (new):** `pages/Accounts.tsx` (tabs: Accounts, Cash Book, Balance Sheet, Integrity), `pages/Payments.tsx` (+ exported `PaymentModal` reused by Customers/Vendors), `pages/Expenses.tsx`, `pages/Employees.tsx` (Staff/Salaries/HR tabs). `components/Calculator.tsx` (mounted in Layout + POS), `components/LedgerModal.tsx`, `lib/statement.ts` (printable statements). Customers/Vendors got Statement + quick Receive/Pay buttons. Nav: "Accounts & Cash" added. types.ts extended.
+
+**Design decisions / known limits (transparent):**
+- Balance sheet retained-earnings recognises purchase bill-level adjustments (freight/tax−discounts) and stock-adjustment value so Assets=Liab+Equity balances exactly (imbalance ₨0 in tests). Weighted-avg rounding could in theory leave <₨1 residue → balance-sheet integrity check uses a ₨1 tolerance; tighten/confirm in Phase 5 with the P&L acceptance suite.
+- Expenses support delete (reverses the account movement, hard-removes Expense+Payment, audit-logged) as a shop correction tool — a pragmatic exception to the never-delete-payments rule; salary-linked expenses are blocked (reverse via the salary).
+- Statements/receipts still print via the browser (Save-as-PDF); true server-side pdfmake PDFs remain a Phase 5 item.
+
+**Next (Phase 5 — Reports):** dashboard charts + all reports (sales/purchases/P&L/stock valuation/aging/payables/expenses/cash book) with server-side PDF + Excel; G10 valuation-at-sale-price + sales-by-payment-method; re-run the price-volatility + P&L acceptance tests and show /reports/integrity all-green. Do NOT start without the owner's "go".
+
+---
+
+## Phase 3 CORE COMPLETE ✅ (POS & Sales)
 
 **What was just done (Phase 3 core, all verified). No schema change — Sale/SaleItem/Payment existed:**
 - **`routes/sales.routes.ts`** — the transactional heart:

@@ -57,7 +57,9 @@ export const PERMISSIONS: PermissionDef[] = [
   { key: "payments.pay_vendor", group: "Money", label: "Pay vendors", default: [ADMIN, MANAGER, ACCOUNTANT] },
   { key: "expenses.view", group: "Money", label: "View expenses", default: [ADMIN, MANAGER, ACCOUNTANT] },
   { key: "expenses.create", group: "Money", label: "Record expenses", default: [ADMIN, MANAGER, ACCOUNTANT] },
-  { key: "expenses.edit", group: "Money", label: "Edit expenses", default: [ADMIN, ACCOUNTANT] },
+  { key: "expenses.edit", group: "Money", label: "Edit / delete expenses", default: [ADMIN, ACCOUNTANT] },
+  { key: "accounts.view", group: "Money", label: "View accounts & cash book", default: [ADMIN, MANAGER, ACCOUNTANT] },
+  { key: "accounts.manage", group: "Money", label: "Manage accounts, transfers, capital & drawings", default: [ADMIN, ACCOUNTANT] },
 
   // ── Stock ──
   { key: "stock.adjust", group: "Stock", label: "Adjust stock (damage / count)", default: [ADMIN, MANAGER] },

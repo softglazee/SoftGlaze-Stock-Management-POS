@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
-import { Plus, Pencil, Trash2, Users, Upload } from "lucide-react";
+import { Plus, Pencil, Trash2, Users, Upload, FileText, HandCoins } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import { Customer, Paged } from "../lib/types";
 import { num, fmtMoney } from "../lib/format";
@@ -17,6 +17,8 @@ import {
   useToast,
 } from "../components/ui";
 import ImportWizard from "../components/ImportWizard";
+import LedgerModal from "../components/LedgerModal";
+import { PaymentModal } from "./Payments";
 
 type FormState = {
   name: string;
@@ -38,6 +40,8 @@ export default function Customers() {
   const [editing, setEditing] = useState<Customer | "new" | null>(null);
   const [deleting, setDeleting] = useState<Customer | null>(null);
   const [importing, setImporting] = useState(false);
+  const [ledgerFor, setLedgerFor] = useState<Customer | null>(null);
+  const [receiveFor, setReceiveFor] = useState<Customer | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [error, setError] = useState<string | null>(null);
 
@@ -183,7 +187,7 @@ export default function Customers() {
                   <th className="px-4 py-2.5 font-medium text-right">Balance (owes you)</th>
                   <th className="px-4 py-2.5 font-medium text-right">Credit limit</th>
                   <th className="px-4 py-2.5 font-medium">Status</th>
-                  <th className="px-4 py-2.5 w-24" />
+                  <th className="px-4 py-2.5 w-40" />
                 </tr>
               </thead>
               <tbody>
@@ -209,6 +213,14 @@ export default function Customers() {
                       </td>
                       <td className="px-4 py-2">
                         <div className="flex justify-end gap-1">
+                          <button className="btn btn-secondary !p-1.5" onClick={() => setLedgerFor(c)} title={`Statement for ${c.name}`}>
+                            <FileText size={14} />
+                          </button>
+                          {can("payments.receive") && (
+                            <button className="btn btn-secondary !p-1.5 hover:!text-accent" onClick={() => setReceiveFor(c)} title={`Receive payment from ${c.name}`}>
+                              <HandCoins size={14} />
+                            </button>
+                          )}
                           <button
                             className="btn btn-secondary !p-1.5"
                             onClick={() => openEdit(c)}
@@ -324,6 +336,16 @@ export default function Customers() {
       />
 
       <ImportWizard entity="customers" open={importing} onClose={() => setImporting(false)} onDone={() => qc.invalidateQueries({ queryKey: ["customers"] })} />
+
+      {ledgerFor && <LedgerModal kind="customer" id={ledgerFor.id} name={ledgerFor.name} onClose={() => setLedgerFor(null)} />}
+      {receiveFor && (
+        <PaymentModal
+          mode="receive"
+          fixedParty={{ id: receiveFor.id, name: receiveFor.name, balance: receiveFor.balance }}
+          onClose={() => setReceiveFor(null)}
+          onDone={(m) => { toast(m); qc.invalidateQueries({ queryKey: ["customers"] }); setReceiveFor(null); }}
+        />
+      )}
     </div>
   );
 }

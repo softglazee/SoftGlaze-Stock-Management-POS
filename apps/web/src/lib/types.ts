@@ -210,6 +210,157 @@ export type StockAdjustment = {
   items: StockAdjustmentItem[];
 };
 
+// ── Money accounts (G1) ──
+export type Account = {
+  id: string;
+  name: string;
+  isCash: boolean;
+  isActive: boolean;
+  accountNo: string | null;
+  bankName: string | null;
+  openingBalance: string;
+  currentBalance: string;
+  sortOrder: number;
+};
+
+export type AccountEntryType = "PAYMENT" | "TRANSFER_IN" | "TRANSFER_OUT" | "CAPITAL_IN" | "DRAWING" | "OPENING";
+export type AccountEntry = {
+  id: string;
+  accountId: string;
+  type: AccountEntryType;
+  amount: string;
+  balance: string;
+  running?: string;
+  refType: string | null;
+  refId: string | null;
+  date: string;
+  notes: string | null;
+};
+
+export type FundTransfer = {
+  id: string;
+  refNo: string;
+  fromAccountId: string;
+  toAccountId: string;
+  fromAccount?: { name: string };
+  toAccount?: { name: string };
+  amount: string;
+  date: string;
+  notes: string | null;
+  user?: { name: string };
+};
+
+export type CapitalDirection = "CAPITAL_IN" | "DRAWING";
+export type CapitalEntry = {
+  id: string;
+  refNo: string;
+  direction: CapitalDirection;
+  accountId: string;
+  account?: { name: string };
+  amount: string;
+  date: string;
+  notes: string | null;
+  user?: { name: string };
+};
+
+export type PaymentType =
+  | "SALE_RECEIPT" | "CUSTOMER_RECEIPT" | "PURCHASE_PAYMENT" | "VENDOR_PAYMENT" | "EXPENSE" | "REFUND_OUT" | "REFUND_IN";
+export type Payment = {
+  id: string;
+  refNo: string;
+  type: PaymentType;
+  amount: string;
+  date: string;
+  notes: string | null;
+  method?: { name: string };
+  customer?: { id: string; code: string; name: string } | null;
+  vendor?: { id: string; code: string; name: string } | null;
+};
+
+// ── Ledgers / statements ──
+export type LedgerEntry = { date: string; refNo: string; type: string; description: string; debit: number; credit: number; balance: number };
+export type CustomerLedger = { customer: Customer; balance: string; opening: number; closing: number; totalDebit: number; totalCredit: number; entries: LedgerEntry[] };
+export type VendorLedger = { vendor: Vendor; balance: string; opening: number; closing: number; totalDebit: number; totalCredit: number; entries: LedgerEntry[] };
+export type AccountStatement = { account: Account; opening: string; closing: string; totalIn: string; totalOut: string; entries: AccountEntry[] };
+
+// ── Expenses ──
+export type ExpenseCategory = { id: string; name: string; _count?: { expenses: number } };
+export type Expense = {
+  id: string;
+  refNo: string;
+  categoryId: string;
+  category?: { id: string; name: string };
+  amount: string;
+  date: string;
+  notes: string | null;
+  user?: { name: string };
+  payment?: { id: string; method?: { name: string } } | null;
+};
+
+// ── Employees & salaries ──
+export type Department = { id: string; name: string; _count?: { employees: number } };
+export type Shift = { id: string; name: string; startTime: string; endTime: string; _count?: { employees: number } };
+export type SalaryPayment = {
+  id: string;
+  refNo: string;
+  employeeId: string;
+  employee?: { id: string; code: string; name: string };
+  month: string;
+  baseAmount: string;
+  bonus: string;
+  deduction: string;
+  netPaid: string;
+  date: string;
+  notes: string | null;
+  user?: { name: string };
+};
+export type Employee = {
+  id: string;
+  code: string;
+  name: string;
+  phone: string | null;
+  cnic: string | null;
+  address: string | null;
+  designation: string | null;
+  photo: string | null;
+  departmentId: string | null;
+  department?: { id: string; name: string } | null;
+  shiftId: string | null;
+  shift?: { id: string; name: string } | null;
+  joinDate: string;
+  baseSalary: string;
+  isActive: boolean;
+  notes: string | null;
+  salaries?: SalaryPayment[];
+};
+export type LeaveType = "PAID" | "UNPAID" | "SICK";
+export type LeaveStatus = "PENDING" | "APPROVED" | "REJECTED";
+export type LeaveRequest = {
+  id: string;
+  employeeId: string;
+  employee?: { id: string; code: string; name: string };
+  fromDate: string;
+  toDate: string;
+  days: number;
+  type: LeaveType;
+  status: LeaveStatus;
+  reason: string | null;
+  approver?: { name: string } | null;
+};
+export type Holiday = { id: string; date: string; name: string };
+
+// ── Reports ──
+export type CashbookRow = { accountId: string; name: string; isCash: boolean; opening: string; moneyIn: string; moneyOut: string; closing: string };
+export type Cashbook = { from: string; to: string; rows: CashbookRow[]; totals: { opening: string; moneyIn: string; moneyOut: string; closing: string } };
+export type BalanceSheet = {
+  assets: { cashBank: string; stockValue: string; receivables: string; vendorAdvances: string; total: string };
+  liabilities: { payables: string; customerAdvances: string; total: string };
+  equity: { capital: string; drawings: string; retainedEarnings: string; total: string };
+  imbalance: number;
+};
+export type IntegrityCheck = { name: string; ok: boolean; detail: string };
+export type IntegrityReport = { allGreen: boolean; checks: IntegrityCheck[]; balanceSheet: BalanceSheet };
+
 export type BusinessPresetInfo = {
   key: string;
   label: string;

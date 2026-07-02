@@ -55,16 +55,16 @@ async function main() {
     await prisma.category.upsert({ where: { name }, create: { name, parentId: iron!.id }, update: {} });
   }
 
-  // ── Payment methods ──
+  // ── Payment methods / money accounts (G1) ──
   const methods = [
-    { name: "Cash", isCash: true },
-    { name: "Bank Transfer", isCash: false },
-    { name: "JazzCash", isCash: false },
-    { name: "EasyPaisa", isCash: false },
-    { name: "Card", isCash: false },
+    { name: "Cash", isCash: true, sortOrder: 0 },
+    { name: "Bank Transfer", isCash: false, sortOrder: 1 },
+    { name: "JazzCash", isCash: false, sortOrder: 2 },
+    { name: "EasyPaisa", isCash: false, sortOrder: 3 },
+    { name: "Card", isCash: false, sortOrder: 4 },
   ];
   for (const m of methods) {
-    await prisma.paymentMethod.upsert({ where: { name: m.name }, create: m, update: {} });
+    await prisma.paymentMethod.upsert({ where: { name: m.name }, create: m, update: { sortOrder: m.sortOrder } });
   }
 
   // ── Expense categories ──

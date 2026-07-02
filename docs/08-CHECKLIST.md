@@ -47,11 +47,17 @@ Tick things off as we build. Mirrors the phases in 01-BUILD-PLAN.md.
 - [ ] G5 Camera barcode scanner + weighing scale (feature-flagged) — deferred (hardware-dependent)
 - [ ] A6 Demo data pack (`db:seed:demo`) + full P&L proof — deferred (best run after Phase 4–5 money/reports exist)
 
-## Phase 4 — Money
-- [ ] Customer receipts  ·  [ ] Vendor payments
-- [ ] Ledgers/statements  ·  [ ] Expenses  ·  [ ] Day close
-- [ ] G1 Accounts & fund transfers (account balances, TRN- transfers, deposits/drawings, balance sheet + integrity check)
-- [ ] G6 HR extensions (departments, shifts, leave requests, holidays)
+## Phase 4 — Money  (completed 2026-07-02)
+- [x] Customer receipts (POST /payments/customer-receipt) · [x] Vendor payments (POST /payments/vendor-payment) — one transaction each: Payment + AccountEntry + party balance + audit
+- [x] Ledgers/statements — GET /ledger/customer/:id & /ledger/vendor/:id (reconstructed running-balance statement) + client PDF print (Save-as-PDF; true server-side pdfmake still Phase 5)
+- [x] Expenses (incl. Miscellaneous) — CRUD + categories; each expense = Payment(EXPENSE) out of an account + P&L hit
+- [x] Employees & Salaries (docs/09 §2) — profiles + photo, Pay Salary atomically creates SalaryPayment + Expense(Salaries) + Payment(EXPENSE); one-per-month DB guard; salary reversal
+- [x] Calculator widget — global floating panel + F12/Ctrl+K hotkey, keyboard entry, memory, "→ field" push (mounted in Layout + POS)
+- [x] Day-close cash book — GET /reports/cashbook (per-account opening/in/out/closing for a date range)
+- [x] G1 Accounts & fund transfers — PaymentMethod upgraded to money accounts (opening/current balance, bank fields); AccountEntry ledger is source of truth (postToAccount/postPayment); TRN- transfers; CAP-/DRW- capital & drawings; per-account statement; **Balance Sheet** (Assets = Liab + Equity, verified imbalance ₨0)
+- [x] `GET /reports/integrity` (built early per CLAUDE rule 1) — stock cache, account cache, sale/purchase math, customer/vendor reconciliation, payment↔ledger, balance-sheet — **all-green verified** (25/25 test assertions)
+- [x] G6 HR extensions — Department, Shift, Holiday, LeaveRequest (approve/reject) — lightweight, one section each on the Employees → HR tab
+- Note: sales & purchases retrofitted to post every payment through the account ledger; fixed a sale-return+cash-refund double-credit (refund now offsets the credit note). Verified end-to-end, test data cleaned, counters reset to 0001.
 
 ## Phase 5 — Reports
 - [ ] Sales · Purchases · P&L · Stock valuation · Movements

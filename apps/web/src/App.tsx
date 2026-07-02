@@ -16,6 +16,10 @@ import POS from "./pages/POS";
 import Sales from "./pages/Sales";
 import Customers from "./pages/Customers";
 import Vendors from "./pages/Vendors";
+import Accounts from "./pages/Accounts";
+import Payments from "./pages/Payments";
+import Expenses from "./pages/Expenses";
+import Employees from "./pages/Employees";
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -83,9 +87,10 @@ export default function App() {
         <Route path="/stock" element={<Stock />} />
         <Route path="/customers" element={<Customers />} />
         <Route path="/vendors" element={<Vendors />} />
-        <Route path="/payments" element={<ComingSoon title="Payments" phase="Phase 4" />} />
-        <Route path="/expenses" element={<ComingSoon title="Expenses" phase="Phase 4" />} />
-        <Route path="/employees" element={<ComingSoon title="Employees & Salaries" phase="Phase 4" />} />
+        <Route path="/accounts" element={<Accounts />} />
+        <Route path="/payments" element={<Payments />} />
+        <Route path="/expenses" element={<Expenses />} />
+        <Route path="/employees" element={<Employees />} />
         <Route path="/reports" element={<ComingSoon title="Reports" phase="Phase 5" />} />
         <Route path="/settings" element={<ComingSoon title="Settings" phase="Phase 6" />} />
       </Route>

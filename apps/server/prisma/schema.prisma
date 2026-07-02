@@ -33,13 +33,16 @@ model User {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  sales        Sale[]
-  purchases    Purchase[]
-  payments     Payment[]
-  expenses     Expense[]
-  adjustments  StockAdjustment[]
-  auditLogs    AuditLog[]
-  salariesPaid SalaryPayment[]
+  sales          Sale[]
+  purchases      Purchase[]
+  payments       Payment[]
+  expenses       Expense[]
+  adjustments    StockAdjustment[]
+  auditLogs      AuditLog[]
+  salariesPaid   SalaryPayment[]
+  fundTransfers  FundTransfer[]
+  capitalEntries CapitalEntry[]
+  leaveApprovals LeaveRequest[]  @relation("LeaveApprover")
 }
 
 // ─────────────────────────── PERMISSIONS (A2) ───────────────────────────
@@ -333,12 +336,93 @@ enum PaymentType {
   REFUND_IN          // refund from vendor
 }
 
+// A money account (G1). Cash drawer, bank accounts, JazzCash/EasyPaisa wallets, card.
+// currentBalance is a CACHE — the AccountEntry ledger is the source of truth (every
+// Payment/Transfer/Capital movement appends an entry in the same transaction).
 model PaymentMethod {
-  id       String    @id @default(cuid())
-  name     String    @unique   // Cash, Meezan Bank, JazzCash, EasyPaisa, Card
-  isCash   Boolean   @default(false)
-  isActive Boolean   @default(true)
-  payments Payment[]
+  id             String         @id @default(cuid())
+  name           String         @unique   // Cash, Meezan Bank, JazzCash, EasyPaisa, Card
+  isCash         Boolean        @default(false)
+  isActive       Boolean        @default(true)
+  accountNo      String?                   // bank account / wallet number
+  bankName       String?                   // Meezan, HBL…
+  openingBalance Decimal        @default(0) @db.Decimal(18, 2)
+  currentBalance Decimal        @default(0) @db.Decimal(18, 2) // cached = openingBalance + Σ entries
+  sortOrder      Int            @default(0)
+  payments       Payment[]
+  entries        AccountEntry[]
+  transfersOut   FundTransfer[] @relation("TransferFrom")
+  transfersIn    FundTransfer[] @relation("TransferTo")
+  capitalEntries CapitalEntry[]
+}
+
+// How an account balance moved. Source of truth for PaymentMethod.currentBalance.
+enum AccountEntryType {
+  PAYMENT      // linked to a Payment (sale/purchase/receipt/vendor/expense/refund)
+  TRANSFER_IN
+  TRANSFER_OUT
+  CAPITAL_IN   // owner deposited capital
+  DRAWING      // owner withdrew (not an expense — hits equity)
+  OPENING      // opening balance seed
+}
+
+// Per-account money ledger. `amount` is SIGNED (+in / −out); `balance` is the
+// running total after this entry. currentBalance cache == last balance.
+model AccountEntry {
+  id        String           @id @default(cuid())
+  accountId String
+  account   PaymentMethod    @relation(fields: [accountId], references: [id])
+  type      AccountEntryType
+  amount    Decimal          @db.Decimal(18, 2)  // signed
+  balance   Decimal          @db.Decimal(18, 2)  // running balance after this entry
+  refType   String?                              // "Payment" | "FundTransfer" | "CapitalEntry"
+  refId     String?
+  date      DateTime         @default(now())
+  notes     String?
+  createdAt DateTime         @default(now())
+
+  @@index([accountId, date])
+}
+
+// Money moved between two accounts (e.g. cash drawer → bank deposit). Creates a
+// paired TRANSFER_OUT + TRANSFER_IN in the same transaction. No P&L effect.
+model FundTransfer {
+  id            String        @id @default(cuid())
+  refNo         String        @unique   // TRN-000001
+  fromAccountId String
+  fromAccount   PaymentMethod @relation("TransferFrom", fields: [fromAccountId], references: [id])
+  toAccountId   String
+  toAccount     PaymentMethod @relation("TransferTo", fields: [toAccountId], references: [id])
+  amount        Decimal       @db.Decimal(18, 2)
+  date          DateTime      @default(now())
+  notes         String?
+  userId        String
+  user          User          @relation(fields: [userId], references: [id])
+  createdAt     DateTime      @default(now())
+
+  @@index([date])
+}
+
+// Owner capital in / drawings out. Affects the Balance Sheet (equity), NOT P&L.
+enum CapitalDirection {
+  CAPITAL_IN
+  DRAWING
+}
+
+model CapitalEntry {
+  id        String           @id @default(cuid())
+  refNo     String           @unique   // CAP-000001 / DRW-000001
+  direction CapitalDirection
+  accountId String
+  account   PaymentMethod    @relation(fields: [accountId], references: [id])
+  amount    Decimal          @db.Decimal(18, 2)
+  date      DateTime         @default(now())
+  notes     String?
+  userId    String
+  user      User             @relation(fields: [userId], references: [id])
+  createdAt DateTime         @default(now())
+
+  @@index([date])
 }
 
 model Payment {
@@ -458,7 +542,65 @@ model Employee {
   notes       String?
   createdAt   DateTime @default(now())
 
-  salaries    SalaryPayment[]
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id])
+  shiftId      String?
+  shift        Shift?      @relation(fields: [shiftId], references: [id])
+
+  salaries      SalaryPayment[]
+  leaveRequests LeaveRequest[]
+}
+
+// ─────────────────────────── HR EXTENSIONS (G6, lightweight) ───────────────────────────
+
+model Department {
+  id        String     @id @default(cuid())
+  name      String     @unique          // Sales, Warehouse, Accounts, Delivery
+  createdAt DateTime   @default(now())
+  employees Employee[]
+}
+
+model Shift {
+  id        String     @id @default(cuid())
+  name      String     @unique          // Morning, Evening
+  startTime String                       // "09:00"
+  endTime   String                       // "18:00"
+  employees Employee[]
+}
+
+enum LeaveType {
+  PAID
+  UNPAID
+  SICK
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model LeaveRequest {
+  id         String      @id @default(cuid())
+  employeeId String
+  employee   Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  fromDate   DateTime
+  toDate     DateTime
+  days       Int         @default(1)
+  type       LeaveType   @default(UNPAID)
+  status     LeaveStatus @default(PENDING)
+  reason     String?
+  approverId String?
+  approver   User?       @relation("LeaveApprover", fields: [approverId], references: [id])
+  createdAt  DateTime    @default(now())
+
+  @@index([employeeId])
+}
+
+model Holiday {
+  id   String   @id @default(cuid())
+  date DateTime @unique
+  name String
 }
 
 // Paying a salary also creates an Expense (category "Salaries") in the same
@@ -559,6 +701,6 @@ model AuditLog {
 }
 
 model Counter {
-  key   String @id  // "sale", "purchase", "payment", "customer", "vendor", "expense", "adjustment", "sku", "employee", "salary"
+  key   String @id  // "sale", "purchase", "payment", "customer", "vendor", "expense", "adjustment", "sku", "employee", "salary", "transfer", "capital", "drawing"
   value Int    @default(0)
 }

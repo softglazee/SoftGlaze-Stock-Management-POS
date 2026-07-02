@@ -17,6 +17,13 @@ import purchaseRoutes from "./routes/purchases.routes";
 import stockRoutes from "./routes/stock.routes";
 import paymentMethodRoutes from "./routes/payment-methods.routes";
 import saleRoutes from "./routes/sales.routes";
+import accountRoutes from "./routes/accounts.routes";
+import paymentRoutes from "./routes/payments.routes";
+import ledgerRoutes from "./routes/ledger.routes";
+import expenseRoutes from "./routes/expenses.routes";
+import employeeRoutes from "./routes/employees.routes";
+import hrRoutes from "./routes/hr.routes";
+import reportRoutes from "./routes/reports.routes";
 
 const app = express();
 
@@ -51,11 +58,15 @@ app.use("/api/v1/permissions", permissionRoutes);// Phase 1 (A2 foundation)
 app.use("/api/v1/import", importRoutes);          // Phase 1 (A3 + G7)
 app.use("/api/v1/purchases", purchaseRoutes);    // Phase 2
 app.use("/api/v1/stock", stockRoutes);           // Phase 2
-app.use("/api/v1/payment-methods", paymentMethodRoutes); // Phase 2 (read-only; CRUD in Phase 4)
+app.use("/api/v1/payment-methods", paymentMethodRoutes); // Phase 2 (read-only list)
 app.use("/api/v1/sales", saleRoutes);            // Phase 3
-// app.use("/api/v1/payments", paymentRoutes);      // Phase 4
-// app.use("/api/v1/expenses", expenseRoutes);      // Phase 4
-// app.use("/api/v1/reports", reportRoutes);        // Phase 5
+app.use("/api/v1/accounts", accountRoutes);      // Phase 4 (G1 accounts, transfers, capital)
+app.use("/api/v1/payments", paymentRoutes);      // Phase 4 (customer receipts, vendor payments)
+app.use("/api/v1/ledger", ledgerRoutes);         // Phase 4 (customer & vendor statements)
+app.use("/api/v1/expenses", expenseRoutes);      // Phase 4
+app.use("/api/v1/employees", employeeRoutes);    // Phase 4 (employees & salaries)
+app.use("/api/v1/hr", hrRoutes);                 // Phase 4 (G6 departments/shifts/leaves/holidays)
+app.use("/api/v1/reports", reportRoutes);        // Phase 4 slice (integrity, cashbook, balance sheet); more in Phase 5
 // app.use("/api/v1/users", userRoutes);            // Phase 6
 // app.use("/api/v1/settings", settingRoutes);      // Phase 6
 

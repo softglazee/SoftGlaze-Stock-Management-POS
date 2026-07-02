@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
-import { Plus, Pencil, Trash2, Truck, Upload } from "lucide-react";
+import { Plus, Pencil, Trash2, Truck, Upload, FileText, Banknote } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import { Vendor, Paged } from "../lib/types";
 import { num, fmtMoney } from "../lib/format";
@@ -17,6 +17,8 @@ import {
   useToast,
 } from "../components/ui";
 import ImportWizard from "../components/ImportWizard";
+import LedgerModal from "../components/LedgerModal";
+import { PaymentModal } from "./Payments";
 
 type FormState = {
   name: string;
@@ -38,6 +40,8 @@ export default function Vendors() {
   const [editing, setEditing] = useState<Vendor | "new" | null>(null);
   const [deleting, setDeleting] = useState<Vendor | null>(null);
   const [importing, setImporting] = useState(false);
+  const [ledgerFor, setLedgerFor] = useState<Vendor | null>(null);
+  const [payFor, setPayFor] = useState<Vendor | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [error, setError] = useState<string | null>(null);
 
@@ -182,7 +186,7 @@ export default function Vendors() {
                   <th className="px-4 py-2.5 font-medium">Phone</th>
                   <th className="px-4 py-2.5 font-medium text-right">Balance (you owe)</th>
                   <th className="px-4 py-2.5 font-medium">Status</th>
-                  <th className="px-4 py-2.5 w-24" />
+                  <th className="px-4 py-2.5 w-40" />
                 </tr>
               </thead>
               <tbody>
@@ -205,6 +209,14 @@ export default function Vendors() {
                       </td>
                       <td className="px-4 py-2">
                         <div className="flex justify-end gap-1">
+                          <button className="btn btn-secondary !p-1.5" onClick={() => setLedgerFor(v)} title={`Statement for ${v.name}`}>
+                            <FileText size={14} />
+                          </button>
+                          {can("payments.pay_vendor") && (
+                            <button className="btn btn-secondary !p-1.5 hover:!text-accent" onClick={() => setPayFor(v)} title={`Pay ${v.name}`}>
+                              <Banknote size={14} />
+                            </button>
+                          )}
                           <button
                             className="btn btn-secondary !p-1.5"
                             onClick={() => openEdit(v)}
@@ -317,6 +329,16 @@ export default function Vendors() {
       />
 
       <ImportWizard entity="vendors" open={importing} onClose={() => setImporting(false)} onDone={() => qc.invalidateQueries({ queryKey: ["vendors"] })} />
+
+      {ledgerFor && <LedgerModal kind="vendor" id={ledgerFor.id} name={ledgerFor.name} onClose={() => setLedgerFor(null)} />}
+      {payFor && (
+        <PaymentModal
+          mode="pay"
+          fixedParty={{ id: payFor.id, name: payFor.name, balance: payFor.balance }}
+          onClose={() => setPayFor(null)}
+          onDone={(m) => { toast(m); qc.invalidateQueries({ queryKey: ["vendors"] }); setPayFor(null); }}
+        />
+      )}
     </div>
   );
 }

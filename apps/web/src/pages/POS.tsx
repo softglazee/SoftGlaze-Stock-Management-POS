@@ -8,6 +8,7 @@ import { num, fmtMoney, fmtQty } from "../lib/format";
 import { useAuth } from "../context/AuthContext";
 import { useToast, Modal, Badge } from "../components/ui";
 import ThemeToggle from "../components/ThemeToggle";
+import Calculator from "../components/Calculator";
 import { printReceipt } from "../lib/receipt";
 
 type Line = { productId: string; name: string; sku: string; type: Product["type"]; unitShort: string; qty: string; unitPrice: string; discount: string; stock: number };
@@ -262,6 +263,7 @@ export default function POS() {
       {showHeld && <ParkedTray kind="held" onClose={() => setShowHeld(false)} onResume={(s) => { loadSale(s); setShowHeld(false); }} />}
       {showQuotes && <ParkedTray kind="quotations" onClose={() => setShowQuotes(false)} onResume={(s) => { loadSale(s); setShowQuotes(false); }} />}
       {quickAdd && <QuickAddCustomer form={quickAdd} onClose={() => setQuickAdd(null)} onCreated={(c) => { setCustomer(c); setQuickAdd(null); }} />}
+      <Calculator />
     </div>
   );
 

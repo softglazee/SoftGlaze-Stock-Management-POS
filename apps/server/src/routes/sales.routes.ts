@@ -15,6 +15,7 @@ import { requirePermission } from "../middleware/permission";
 import { roleHasPermission } from "../lib/permissions";
 import { nextNumber } from "../utils/counter";
 import { applyMovement, InsufficientStockError } from "../lib/stock";
+import { postPayment } from "../lib/accounts";
 
 const router = Router();
 router.use(requireAuth);
@@ -247,8 +248,7 @@ router.post("/", requirePermission("sales.create"), async (req, res, next) => {
       }
       if (customer && dueAmount > 0) await tx.customer.update({ where: { id: customer.id }, data: { balance: { increment: money(dueAmount) } } });
       for (const p of body.payments ?? []) {
-        const refNo = await nextNumber(tx, "payment", "PAY");
-        await tx.payment.create({ data: { refNo, type: "SALE_RECEIPT", methodId: p.methodId, amount: money(p.amount), customerId: customer?.id ?? null, saleId: created.id, userId: req.user!.id, notes: `Sale ${invoiceNo}` } });
+        await postPayment(tx, { type: "SALE_RECEIPT", methodId: p.methodId, amount: p.amount, customerId: customer?.id ?? null, saleId: created.id, userId: req.user!.id, notes: `Sale ${invoiceNo}` });
       }
       await tx.auditLog.create({ data: { userId: req.user!.id, action: "CREATE_SALE", entity: "Sale", entityId: created.id, details: `${invoiceNo} · ₨${grandTotal}${dueAmount > 0 ? ` · udhaar ₨${dueAmount}` : ""}` } });
       return created;
@@ -334,12 +334,13 @@ router.post("/:id/return", requirePermission("sales.return"), async (req, res, n
           }
         }
       }
-      // Reduce the customer's receivable by the returned value (may create a credit we owe them)
+      // Credit note: reduce the customer's receivable by the returned value.
       if (original.customerId) await tx.customer.update({ where: { id: original.customerId }, data: { balance: { decrement: money(returnValue) } } });
-      // Optional cash/bank refund out
+      // Optional cash/bank refund out. Paying cash settles that credit, so it offsets
+      // the receivable back — net balance change is zero when refunded in cash.
       if (body.refundMethodId) {
-        const refNo = await nextNumber(tx, "payment", "PAY");
-        await tx.payment.create({ data: { refNo, type: "REFUND_OUT", methodId: body.refundMethodId, amount: money(returnValue), customerId: original.customerId, saleId: doc.id, userId: req.user!.id, notes: `Refund for ${invoiceNo}` } });
+        await postPayment(tx, { type: "REFUND_OUT", methodId: body.refundMethodId, amount: returnValue, customerId: original.customerId, saleId: doc.id, userId: req.user!.id, notes: `Refund for ${invoiceNo}` });
+        if (original.customerId) await tx.customer.update({ where: { id: original.customerId }, data: { balance: { increment: money(returnValue) } } });
       }
       await tx.auditLog.create({ data: { userId: req.user!.id, action: "SALE_RETURN", entity: "Sale", entityId: doc.id, details: `${invoiceNo} of ${original.invoiceNo} · ₨${returnValue}` } });
       return doc;
