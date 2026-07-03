@@ -3,6 +3,21 @@
 > Living hand-off file. Updated after every module or mid-task stop.
 > Read this at the start of every session (see CLAUDE.md → Grounding & session continuity rules).
 
+## Future roadmap started — F1 Cheque tracking DONE ✅ + 2nd opening-balance accounting bug fixed (2026-07-03)
+
+Owner asked to "complete all features" (docs/10 future roadmap F1–F18), installer deferred. Building them one at a time, verified. **F1 (post-dated cheques) complete**, migration `20260703082504_f1_cheques`.
+
+**Model:** a pending cheque sits in a non-cash holding account — RECEIVED → "Cheques in Hand" (asset), ISSUED → "Post-dated Cheques" (contra). Receiving a customer cheque posts a CUSTOMER_RECEIPT into Cheques-in-Hand (customer udhaar drops now — shopkeeper expectation) + creates the Cheque (PENDING). CLEAR = FundTransfer-style move to/from a real bank account. BOUNCE/CANCEL = a reversing (negative-amount) CUSTOMER_RECEIPT/VENDOR_PAYMENT so the party owes again + the holding account returns to 0. All integrity-safe (reconciliation nets the +X and −X receipts to 0; transfers don't touch the payments-vs-ledger check).
+- Schema: `Cheque` model + `ChequeDirection`/`ChequeStatus` enums + `NotificationType.CHEQUE_DUE`; back-relations on Customer/Vendor/User. `lib/cheques.ts` (ensureHoldingAccount). `routes/cheques.routes.ts` (list, summary, receive, issue, :id/clear, :id/bounce, :id/cancel) mounted at `/api/v1/cheques`; gated by existing payments.* perms. Cheque-due sweep added to `notify.runSweep`.
+- Web: `pages/Cheques.tsx` (summary cards: in-hand / issued / due-soon; direction+status filters; register table with Cleared/Bounced/Cancel actions; Receive/Issue/Clear modals + bounce/cancel confirm) + nav ("Cheques", ScrollText icon) + route + `Cheque`/`ChequeSummary` types.
+- **Verified (throwaway `softglaze_gaptest` DB, dropped after):** 19/19 — receive settles udhaar into Cheques-in-Hand, clear moves it to Cash, bounce restores the debt, issue/clear mirror for vendors with the contra account, integrity all-green + balance sheet ₨0. Real DB integrity still ₨0 (no regression); both apps tsc clean.
+
+**2nd opening-balance accounting bug FIXED (same family as the opening-stock one):** opening **customer/vendor balances** (udhaar owed from before the shop started on the system) are opening assets/liabilities with NO equity counterpart → balance sheet was short by (opening receivables − opening payables). Prior tests never used opening party balances so it hid; the F1 test surfaced it. Fixed in `computeBalanceSheet`: added `openingPartyCapital = Σ customer.openingBalance − Σ vendor.openingBalance` to equity (new "Opening balances" equity line on the Accounts sheet). ⚠️ Together with the opening-stock fix, the balance sheet now stays exactly balanced once the owner enters REAL opening inventory + opening udhaar at launch (Phase 9) — both were latent launch-breakers.
+
+**Next:** F2 (delivery challans), then F3 (advance bookings) … per docs/10 order. Installer build still deferred (owner said later).
+
+---
+
 ## Gap-closure round + Windows installer (2026-07-03) — 10 audit gaps closed, opening-stock accounting bug FIXED ✅
 
 A 4-agent audit of every feature doc vs. code found the core 100% built (accounting sacred, price-volatility snapshots confirmed, 34/34 future items correctly NOT built early) but ~10 convenience/reporting gaps. Owner said "close all 10". Done, both apps tsc clean, and the new money path E2E-tested on a **throwaway DB** (`softglaze_gaptest`, created/migrated/seeded/dropped — real DB untouched): 12/12 checks incl. integrity all-green + balance sheet ₨0.

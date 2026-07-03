@@ -195,8 +195,8 @@ async function computeBalanceSheet() {
   const [accounts, products, customers, vendors, capital, salesProfit, retProfit, expenseAgg, purAgg, purItems, adjMoves] = await Promise.all([
     prisma.paymentMethod.findMany({ select: { currentBalance: true } }),
     prisma.product.findMany({ select: { stockQty: true, costPrice: true } }),
-    prisma.customer.findMany({ select: { balance: true } }),
-    prisma.vendor.findMany({ select: { balance: true } }),
+    prisma.customer.findMany({ select: { balance: true, openingBalance: true } }),
+    prisma.vendor.findMany({ select: { balance: true, openingBalance: true } }),
     prisma.capitalEntry.groupBy({ by: ["direction"], _sum: { amount: true } }),
     prisma.sale.aggregate({ _sum: { profit: true }, where: { isReturn: false, status: "COMPLETED" } }),
     prisma.sale.aggregate({ _sum: { profit: true }, where: { isReturn: true } }),
@@ -215,6 +215,14 @@ async function computeBalanceSheet() {
 
   const capitalIn = r2(num(capital.find((c) => c.direction === "CAPITAL_IN")?._sum.amount));
   const drawings = r2(num(capital.find((c) => c.direction === "DRAWING")?._sum.amount));
+
+  // Opening customer/vendor balances (money owed from BEFORE the shop started on the
+  // system) are opening assets/liabilities — their counterpart is the owner's OPENING
+  // CAPITAL (equity), same idea as opening stock. Net = opening receivables − opening
+  // payables. Without this the sheet is off by that net whenever opening balances exist.
+  const openingPartyCapital = r2(
+    customers.reduce((s, c) => s + num(c.openingBalance), 0) - vendors.reduce((s, v) => s + num(v.openingBalance), 0)
+  );
 
   // Inventory value implied by the stock ledger (each movement at its recorded cost).
   // Differs from stockValue (stockQty×current cost) only by manual cost-price
@@ -239,13 +247,13 @@ async function computeBalanceSheet() {
 
   const assetsTotal = r2(cashBank + stockValue + receivables + vendorAdvances);
   const liabilitiesTotal = r2(payables + customerAdvances);
-  const equityTotal = r2(capitalIn - drawings + retainedEarnings + openingStockValue);
+  const equityTotal = r2(capitalIn - drawings + retainedEarnings + openingStockValue + openingPartyCapital);
   const imbalance = r2(assetsTotal - (liabilitiesTotal + equityTotal));
 
   return {
     assets: { cashBank: money(cashBank), stockValue: money(stockValue), receivables: money(receivables), vendorAdvances: money(vendorAdvances), total: money(assetsTotal) },
     liabilities: { payables: money(payables), customerAdvances: money(customerAdvances), total: money(liabilitiesTotal) },
-    equity: { capital: money(capitalIn), openingStock: money(openingStockValue), drawings: money(drawings), retainedEarnings: money(retainedEarnings), total: money(equityTotal) },
+    equity: { capital: money(capitalIn), openingStock: money(openingStockValue), openingBalances: money(openingPartyCapital), drawings: money(drawings), retainedEarnings: money(retainedEarnings), total: money(equityTotal) },
     imbalance,
   };
 }

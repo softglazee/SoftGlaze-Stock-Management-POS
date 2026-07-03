@@ -277,6 +277,26 @@ export type Payment = {
   vendor?: { id: string; code: string; name: string } | null;
 };
 
+// ── Cheques (F1) ──
+export type ChequeStatus = "PENDING" | "CLEARED" | "BOUNCED" | "CANCELLED";
+export type Cheque = {
+  id: string;
+  refNo: string;
+  direction: "RECEIVED" | "ISSUED";
+  customer?: { id: string; code: string; name: string; phone: string | null } | null;
+  vendor?: { id: string; code: string; name: string; phone: string | null } | null;
+  bankName: string;
+  chequeNo: string;
+  amount: string;
+  chequeDate: string;
+  status: ChequeStatus;
+  settledAccountId: string | null;
+  clearedAt: string | null;
+  notes: string | null;
+  createdAt: string;
+};
+export type ChequeSummary = { groups: { direction: string; status: string; count: number; amount: string }[]; dueSoon: number };
+
 // ── Ledgers / statements ──
 export type LedgerEntry = { date: string; refNo: string; type: string; description: string; debit: number; credit: number; balance: number };
 export type CustomerLedger = { customer: Customer; balance: string; opening: number; closing: number; totalDebit: number; totalCredit: number; entries: LedgerEntry[] };
@@ -355,7 +375,7 @@ export type Cashbook = { from: string; to: string; rows: CashbookRow[]; totals: 
 export type BalanceSheet = {
   assets: { cashBank: string; stockValue: string; receivables: string; vendorAdvances: string; total: string };
   liabilities: { payables: string; customerAdvances: string; total: string };
-  equity: { capital: string; openingStock: string; drawings: string; retainedEarnings: string; total: string };
+  equity: { capital: string; openingStock: string; openingBalances: string; drawings: string; retainedEarnings: string; total: string };
   imbalance: number;
 };
 export type IntegrityCheck = { name: string; ok: boolean; detail: string };

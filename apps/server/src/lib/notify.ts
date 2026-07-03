@@ -75,5 +75,13 @@ export async function runSweep(): Promise<{ lowStock: number; debt: number; paya
     payable++;
   }
 
+  // Cheques due to clear on/before today that are still PENDING
+  const today = new Date(); today.setHours(23, 59, 59, 999);
+  const dueCheques = await prisma.cheque.findMany({ where: { status: "PENDING", chequeDate: { lte: today } }, select: { id: true, chequeNo: true, amount: true, direction: true, customer: { select: { name: true } }, vendor: { select: { name: true } } } });
+  for (const c of dueCheques) {
+    const party = c.customer?.name ?? c.vendor?.name ?? "";
+    await createNotification({ type: "CHEQUE_DUE", title: c.direction === "RECEIVED" ? "Cheque to deposit" : "Cheque will be presented", message: `Cheque ${c.chequeNo} (${party}) for ₨${c.amount} is due — mark it cleared or bounced`, entity: "Cheque", entityId: c.id });
+  }
+
   return { lowStock, debt, payable };
 }

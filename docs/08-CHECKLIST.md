@@ -95,3 +95,8 @@ Tick things off as we build. Mirrors the phases in 01-BUILD-PLAN.md.
 
 ## Phase 9 — Launch
 - [ ] Real inventory entered  ·  [ ] Staff accounts made  ·  [ ] One full shop-day test
+
+## Future roadmap (docs/10) — building post-launch features early on owner request
+- [x] **F1 · Post-dated cheque tracking** — RECEIVED/ISSUED register; a pending cheque settles the party balance into a "Cheques in Hand"/"Post-dated Cheques" holding account, then CLEARS to a bank account or BOUNCES/CANCELS (reversed, party owes again). Cheque-due bell alerts. Migration `20260703082504_f1_cheques`. Verified 19/19 on a throwaway DB, integrity all-green + balance sheet ₨0.
+- [x] **Accounting fix (launch-critical):** opening customer/vendor balances now recognised as **opening capital (equity)** — same family as the opening-stock fix. Both were latent balance-sheet breakers that only trigger once real opening inventory + opening udhaar are entered at launch.
+- [ ] F2 delivery challans · F3 advance bookings · F4 estimator · F5 attendance … (docs/10 order)

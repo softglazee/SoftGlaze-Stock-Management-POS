@@ -42,6 +42,7 @@ model User {
   salariesPaid   SalaryPayment[]
   fundTransfers  FundTransfer[]
   capitalEntries CapitalEntry[]
+  cheques        Cheque[]
   leaveApprovals LeaveRequest[]  @relation("LeaveApprover")
 }
 
@@ -195,6 +196,7 @@ model Customer {
 
   sales    Sale[]
   payments Payment[]
+  cheques  Cheque[]
 
   @@index([name])
   @@index([phone])
@@ -215,6 +217,7 @@ model Vendor {
 
   purchases Purchase[]
   payments  Payment[]
+  cheques   Cheque[]
 
   @@index([name])
 }
@@ -452,6 +455,49 @@ model Payment {
   @@index([type])
 }
 
+// ─────────────────────────── CHEQUES (F1) ───────────────────────────
+// Post-dated cheque tracking. A RECEIVED cheque settles the customer's udhaar and
+// sits in a "Cheques in Hand" holding account (an asset) until it CLEARS into a bank
+// account; a BOUNCE cleanly reverses the receipt (customer owes again). ISSUED cheques
+// mirror this against a post-dated-cheques holding account for vendors.
+enum ChequeDirection {
+  RECEIVED // customer gave us a cheque
+  ISSUED   // we gave a vendor a cheque
+}
+
+enum ChequeStatus {
+  PENDING   // not yet cleared — money is promised, not real cash
+  CLEARED   // cleared into/out of a bank account
+  BOUNCED   // returned unpaid — receipt reversed
+  CANCELLED // torn up / replaced before clearing
+}
+
+model Cheque {
+  id               String          @id @default(cuid())
+  refNo            String          @unique // CHQ-000001
+  direction        ChequeDirection
+  customerId       String?
+  customer         Customer?       @relation(fields: [customerId], references: [id])
+  vendorId         String?
+  vendor           Vendor?         @relation(fields: [vendorId], references: [id])
+  bankName         String // the drawer's bank printed on the cheque
+  chequeNo         String
+  amount           Decimal         @db.Decimal(18, 2)
+  chequeDate       DateTime // the date written on the cheque (when it can be banked)
+  status           ChequeStatus    @default(PENDING)
+  holdingAccountId String // "Cheques in Hand" (received) / "Post-dated Cheques" (issued) — where it sits while PENDING
+  settledAccountId String? // the real bank account it cleared into/out of
+  receiptPaymentId String? // the Payment created on receive/issue (used to reverse on bounce)
+  clearedAt        DateTime?
+  notes            String?
+  userId           String
+  user             User            @relation(fields: [userId], references: [id])
+  createdAt        DateTime        @default(now())
+
+  @@index([status])
+  @@index([chequeDate])
+}
+
 model ExpenseCategory {
   id       String    @id @default(cuid())
   name     String    @unique   // Rent, Salaries, Electricity, Transport, Tea/Misc
@@ -633,6 +679,7 @@ enum NotificationType {
   DEBT_REMINDER    // customer receivable pending too long
   PAYABLE_REMINDER // vendor payment due
   CREDIT_LIMIT     // customer crossed credit limit
+  CHEQUE_DUE       // a pending cheque is due to clear on/before today
   SYSTEM           // backups, errors, announcements
 }
 
