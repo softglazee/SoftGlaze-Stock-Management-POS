@@ -10,6 +10,7 @@ import { useToast, Modal, Badge } from "../components/ui";
 import ThemeToggle from "../components/ThemeToggle";
 import Calculator from "../components/Calculator";
 import { printReceipt } from "../lib/receipt";
+import { waLink as buildWaLink } from "../lib/phone";
 
 type Line = { productId: string; name: string; sku: string; type: Product["type"]; unitShort: string; qty: string; unitPrice: string; discount: string; stock: number };
 type PayRow = { methodId: string; amount: string };
@@ -202,6 +203,8 @@ export default function POS() {
                           <input className="input mono !py-1 !w-16 text-right" type="number" step="any" min="0" value={l.qty} onChange={(e) => setLine(i, { qty: e.target.value })} aria-label="Qty" />
                           <span className="text-muted text-xs">{l.unitShort} ×</span>
                           <input className="input mono !py-1 !w-24 text-right" type="number" step="0.01" min="0" value={l.unitPrice} readOnly={!canEditPrice} onChange={(e) => setLine(i, { unitPrice: e.target.value })} aria-label="Unit price" title={canEditPrice ? "" : "Price editing needs permission"} />
+                          <span className="text-muted text-xs" title="Discount on this item">− </span>
+                          <input className="input mono !py-1 !w-20 text-right" type="number" step="0.01" min="0" value={l.discount} onChange={(e) => setLine(i, { discount: e.target.value })} aria-label="Item discount" title="Discount on this item (Rs)" />
                         </div>
                       </td>
                       <td className="px-3 py-2 text-right whitespace-nowrap">
@@ -372,9 +375,10 @@ function ParkedTray({ kind, onClose, onResume }: { kind: "held" | "quotations"; 
 
 /* ─────────── Success overlay ─────────── */
 function SuccessOverlay({ sale, settings, onNew }: { sale: Sale; settings: Record<string, string>; onNew: () => void }) {
-  const waLink = sale.customer?.phone
-    ? `https://wa.me/${sale.customer.phone.replace(/[^0-9]/g, "")}?text=${encodeURIComponent(`${settings.shop_name || "SoftGlaze"}\nInvoice ${sale.invoiceNo}\nTotal ${fmtMoney(sale.grandTotal)} · Paid ${fmtMoney(sale.paidAmount)} · Balance ${fmtMoney(sale.dueAmount)}\nThank you!`)}`
-    : null;
+  const waLink = buildWaLink(
+    sale.customer?.phone,
+    `${settings.shop_name || "SoftGlaze"}\nInvoice ${sale.invoiceNo}\nTotal ${fmtMoney(sale.grandTotal)} · Paid ${fmtMoney(sale.paidAmount)} · Balance ${fmtMoney(sale.dueAmount)}\nThank you!`
+  ) || null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="card w-full max-w-sm p-6 text-center">

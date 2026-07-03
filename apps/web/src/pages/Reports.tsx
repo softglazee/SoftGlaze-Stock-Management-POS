@@ -1,22 +1,24 @@
 import { useState } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { FileText, Sheet, BarChart3, TrendingUp, Truck, Boxes, Users, Receipt, CreditCard, Activity } from "lucide-react";
+import { FileText, Sheet, BarChart3, TrendingUp, Truck, Boxes, Users, Receipt, CreditCard, Activity, IdCard } from "lucide-react";
 import { api, download, ApiError } from "../lib/api";
 import { ReportTable } from "../lib/types";
 import { fmtMoney } from "../lib/format";
 import { useAuth } from "../context/AuthContext";
 import { PageHeader, TableSkeleton, EmptyState, useToast } from "../components/ui";
 
-type Cfg = { key: string; label: string; path: string; icon: typeof FileText; period?: boolean; basis?: boolean; perm?: string };
+type Cfg = { key: string; label: string; path: string; icon: typeof FileText; period?: boolean; basis?: boolean; filters?: boolean; perm?: string };
 
 const REPORTS: Cfg[] = [
   { key: "profit-loss", label: "Profit & Loss", path: "/reports/profit-loss", icon: TrendingUp, period: true, perm: "reports.profit" },
-  { key: "sales", label: "Sales Register", path: "/reports/sales", icon: Receipt, period: true },
+  { key: "sales", label: "Sales Register", path: "/reports/sales", icon: Receipt, period: true, filters: true },
+  { key: "top-customers", label: "Top Customers", path: "/reports/top-customers", icon: Users, period: true },
   { key: "purchases", label: "Purchase Register", path: "/reports/purchases", icon: Truck, period: true },
   { key: "stock-valuation", label: "Stock Valuation", path: "/reports/stock-valuation", icon: Boxes, basis: true },
   { key: "receivables", label: "Receivables Aging", path: "/reports/receivables", icon: Users },
   { key: "payables", label: "Payables Aging", path: "/reports/payables", icon: Truck },
   { key: "expenses", label: "Expenses by Category", path: "/reports/expenses", icon: Receipt, period: true },
+  { key: "salaries", label: "Salary Register", path: "/reports/salaries", icon: IdCard, period: true },
   { key: "sales-by-payment-method", label: "Sales by Payment Method", path: "/reports/sales-by-payment-method", icon: CreditCard, period: true },
   { key: "stock-movements", label: "Stock Movements", path: "/reports/stock-movements", icon: Activity, period: true },
 ];
@@ -41,7 +43,7 @@ export default function Reports() {
             </button>
           ))}
         </nav>
-        <ReportView cfg={active} />
+        <ReportView key={active.key} cfg={active} />
       </div>
     </div>
   );
@@ -54,10 +56,20 @@ function ReportView({ cfg }: { cfg: Cfg }) {
   const [from, setFrom] = useState(monthAgo);
   const [to, setTo] = useState(today);
   const [basis, setBasis] = useState<"cost" | "sale">("cost");
+  const [customerId, setCustomerId] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+  const [productId, setProductId] = useState("");
+
+  const { data: custs } = useQuery({ queryKey: ["rep-custs"], queryFn: () => api<{ customers: { id: string; name: string }[] }>("/customers?limit=300&status=active"), enabled: !!cfg.filters });
+  const { data: cats } = useQuery({ queryKey: ["rep-cats"], queryFn: () => api<{ categories: { id: string; name: string }[] }>("/categories"), enabled: !!cfg.filters });
+  const { data: prods } = useQuery({ queryKey: ["rep-prods"], queryFn: () => api<{ products: { id: string; name: string }[] }>("/products?limit=300"), enabled: !!cfg.filters });
 
   const qs = new URLSearchParams({
     ...(cfg.period ? { from, to: `${to}T23:59:59` } : {}),
     ...(cfg.basis ? { basis } : {}),
+    ...(cfg.filters && customerId ? { customerId } : {}),
+    ...(cfg.filters && categoryId ? { categoryId } : {}),
+    ...(cfg.filters && productId ? { productId } : {}),
   }).toString();
 
   const { data, isLoading, error } = useQuery({
@@ -100,6 +112,13 @@ function ReportView({ cfg }: { cfg: Cfg }) {
               <option value="sale">Sale price</option>
             </select>
           </div>
+        )}
+        {cfg.filters && (
+          <>
+            <div><label className="label">Customer</label><select className="input !w-44" value={customerId} onChange={(e) => setCustomerId(e.target.value)}><option value="">All customers</option>{(custs?.customers ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+            <div><label className="label">Category</label><select className="input !w-40" value={categoryId} onChange={(e) => { setCategoryId(e.target.value); setProductId(""); }}><option value="">All categories</option>{(cats?.categories ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+            <div><label className="label">Product</label><select className="input !w-44" value={productId} onChange={(e) => setProductId(e.target.value)}><option value="">All products</option>{(prods?.products ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+          </>
         )}
         <div className="flex-1" />
         <button className="btn btn-secondary" onClick={() => dl("pdf")} disabled={!report}><FileText size={15} /> PDF</button>

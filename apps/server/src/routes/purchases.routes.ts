@@ -37,7 +37,7 @@ const createSchema = z.object({
 });
 
 const purchaseInclude = {
-  vendor: { select: { id: true, code: true, name: true } },
+  vendor: { select: { id: true, code: true, name: true, phone: true } },
   user: { select: { id: true, name: true } },
   items: { include: { product: { select: { id: true, name: true, sku: true, unit: { select: { shortName: true } } } } } },
   payments: { include: { method: { select: { name: true } } } },

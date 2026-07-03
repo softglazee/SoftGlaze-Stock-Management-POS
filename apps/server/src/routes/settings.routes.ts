@@ -75,6 +75,8 @@ const INTEGRATION_KEYS = [
   "whatsapp_mode", "whatsapp_number", "sms_enabled",
   // G8 message templates (WhatsApp text with {placeholders})
   "tmpl_wa_receipt", "tmpl_wa_reminder", "tmpl_wa_purchase", "tmpl_wa_statement", "tmpl_wa_quotation",
+  // G8 email templates (subject + body, same {placeholders})
+  "tmpl_email_subject", "tmpl_email_body", "tmpl_email_reminder_subject", "tmpl_email_reminder_body",
 ] as const;
 
 /** Secrets never returned to the client in plain text. */

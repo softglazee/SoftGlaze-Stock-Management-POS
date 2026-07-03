@@ -54,15 +54,45 @@ router.get("/", requirePermission("payments.receive", "payments.pay_vendor", "re
   }
 });
 
+/** GET /payments/customer-bills/:customerId — that customer's still-outstanding invoices (for allocation). */
+router.get("/customer-bills/:customerId", requirePermission("payments.receive"), async (req, res, next) => {
+  try {
+    const bills = await prisma.sale.findMany({
+      where: { customerId: req.params.customerId, status: "COMPLETED", isReturn: false, dueAmount: { gt: 0 } },
+      select: { id: true, invoiceNo: true, date: true, grandTotal: true, dueAmount: true },
+      orderBy: { date: "asc" },
+    });
+    res.json({ ok: true, data: { bills } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** GET /payments/vendor-bills/:vendorId — that vendor's still-outstanding purchase bills (for allocation). */
+router.get("/vendor-bills/:vendorId", requirePermission("payments.pay_vendor"), async (req, res, next) => {
+  try {
+    const bills = await prisma.purchase.findMany({
+      where: { vendorId: req.params.vendorId, status: "RECEIVED", isReturn: false, dueAmount: { gt: 0 } },
+      select: { id: true, invoiceNo: true, refInvoiceNo: true, date: true, grandTotal: true, dueAmount: true },
+      orderBy: { date: "asc" },
+    });
+    res.json({ ok: true, data: { bills } });
+  } catch (err) {
+    next(err);
+  }
+});
+
 const receiptSchema = z.object({
   customerId: z.string().min(1, "Pick a customer"),
   methodId: z.string().min(1, "Pick where the money went"),
   amount: z.coerce.number().positive("Amount must be more than 0"),
+  saleId: z.string().min(1).nullable().optional(), // allocate this receipt to one specific invoice
   date: z.coerce.date().optional(),
   notes: z.string().trim().max(300).nullable().optional(),
 });
 
-/** POST /payments/customer-receipt — receive money from a customer (reduces their balance) */
+/** POST /payments/customer-receipt — receive money from a customer (reduces their balance).
+ *  If saleId is given, the money is also applied to that specific invoice's due. */
 router.post("/customer-receipt", requirePermission("payments.receive"), async (req, res, next) => {
   try {
     const body = receiptSchema.parse(req.body);
@@ -71,10 +101,21 @@ router.post("/customer-receipt", requirePermission("payments.receive"), async (r
     const method = await prisma.paymentMethod.findUnique({ where: { id: body.methodId }, select: { id: true } });
     if (!method) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: "Unknown account" } });
 
+    // Optional allocation to one invoice.
+    let sale: { id: string; invoiceNo: string; dueAmount: Prisma.Decimal } | null = null;
+    if (body.saleId) {
+      const s = await prisma.sale.findUnique({ where: { id: body.saleId }, select: { id: true, invoiceNo: true, customerId: true, status: true, isReturn: true, dueAmount: true } });
+      if (!s || s.isReturn || s.customerId !== customer.id) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: "That bill does not belong to this customer" } });
+      if (s.status !== "COMPLETED" || Number(s.dueAmount) <= 0) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: "That bill has nothing outstanding" } });
+      if (body.amount > Number(s.dueAmount) + 0.01) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: `That bill only has ₨${s.dueAmount} outstanding — receive the rest against the balance instead` } });
+      sale = { id: s.id, invoiceNo: s.invoiceNo, dueAmount: s.dueAmount };
+    }
+
     const payment = await prisma.$transaction(async (tx) => {
-      const created = await postPayment(tx, { type: "CUSTOMER_RECEIPT", methodId: body.methodId, amount: body.amount, customerId: customer.id, userId: req.user!.id, notes: body.notes || `Receipt from ${customer.name}`, date: body.date });
+      const created = await postPayment(tx, { type: "CUSTOMER_RECEIPT", methodId: body.methodId, amount: body.amount, customerId: customer.id, saleId: sale?.id ?? null, userId: req.user!.id, notes: body.notes || (sale ? `Receipt for ${sale.invoiceNo}` : `Receipt from ${customer.name}`), date: body.date });
       await tx.customer.update({ where: { id: customer.id }, data: { balance: { decrement: money(body.amount) } } });
-      await tx.auditLog.create({ data: { userId: req.user!.id, action: "CUSTOMER_RECEIPT", entity: "Payment", entityId: created.id, details: `${created.refNo} · ${customer.name} · ₨${body.amount}` } });
+      if (sale) await tx.sale.update({ where: { id: sale.id }, data: { paidAmount: { increment: money(body.amount) }, dueAmount: { decrement: money(body.amount) } } });
+      await tx.auditLog.create({ data: { userId: req.user!.id, action: "CUSTOMER_RECEIPT", entity: "Payment", entityId: created.id, details: `${created.refNo} · ${customer.name} · ₨${body.amount}${sale ? ` · ${sale.invoiceNo}` : ""}` } });
       return created;
     });
     const full = await prisma.payment.findUnique({ where: { id: payment.id }, include: paymentInclude });
@@ -89,11 +130,13 @@ const vendorPaySchema = z.object({
   vendorId: z.string().min(1, "Pick a vendor"),
   methodId: z.string().min(1, "Pick which account paid"),
   amount: z.coerce.number().positive("Amount must be more than 0"),
+  purchaseId: z.string().min(1).nullable().optional(), // allocate this payment to one specific purchase
   date: z.coerce.date().optional(),
   notes: z.string().trim().max(300).nullable().optional(),
 });
 
-/** POST /payments/vendor-payment — pay a vendor (reduces what we owe them) */
+/** POST /payments/vendor-payment — pay a vendor (reduces what we owe them).
+ *  If purchaseId is given, the money is also applied to that specific bill's due. */
 router.post("/vendor-payment", requirePermission("payments.pay_vendor"), async (req, res, next) => {
   try {
     const body = vendorPaySchema.parse(req.body);
@@ -102,10 +145,21 @@ router.post("/vendor-payment", requirePermission("payments.pay_vendor"), async (
     const method = await prisma.paymentMethod.findUnique({ where: { id: body.methodId }, select: { id: true } });
     if (!method) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: "Unknown account" } });
 
+    // Optional allocation to one purchase bill.
+    let purchase: { id: string; invoiceNo: string; dueAmount: Prisma.Decimal } | null = null;
+    if (body.purchaseId) {
+      const p = await prisma.purchase.findUnique({ where: { id: body.purchaseId }, select: { id: true, invoiceNo: true, vendorId: true, status: true, isReturn: true, dueAmount: true } });
+      if (!p || p.isReturn || p.vendorId !== vendor.id) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: "That bill does not belong to this vendor" } });
+      if (p.status !== "RECEIVED" || Number(p.dueAmount) <= 0) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: "That bill has nothing outstanding" } });
+      if (body.amount > Number(p.dueAmount) + 0.01) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: `That bill only has ₨${p.dueAmount} outstanding — pay the rest against the balance instead` } });
+      purchase = { id: p.id, invoiceNo: p.invoiceNo, dueAmount: p.dueAmount };
+    }
+
     const payment = await prisma.$transaction(async (tx) => {
-      const created = await postPayment(tx, { type: "VENDOR_PAYMENT", methodId: body.methodId, amount: body.amount, vendorId: vendor.id, userId: req.user!.id, notes: body.notes || `Payment to ${vendor.name}`, date: body.date });
+      const created = await postPayment(tx, { type: "VENDOR_PAYMENT", methodId: body.methodId, amount: body.amount, vendorId: vendor.id, purchaseId: purchase?.id ?? null, userId: req.user!.id, notes: body.notes || (purchase ? `Payment for ${purchase.invoiceNo}` : `Payment to ${vendor.name}`), date: body.date });
       await tx.vendor.update({ where: { id: vendor.id }, data: { balance: { decrement: money(body.amount) } } });
-      await tx.auditLog.create({ data: { userId: req.user!.id, action: "VENDOR_PAYMENT", entity: "Payment", entityId: created.id, details: `${created.refNo} · ${vendor.name} · ₨${body.amount}` } });
+      if (purchase) await tx.purchase.update({ where: { id: purchase.id }, data: { paidAmount: { increment: money(body.amount) }, dueAmount: { decrement: money(body.amount) } } });
+      await tx.auditLog.create({ data: { userId: req.user!.id, action: "VENDOR_PAYMENT", entity: "Payment", entityId: created.id, details: `${created.refNo} · ${vendor.name} · ₨${body.amount}${purchase ? ` · ${purchase.invoiceNo}` : ""}` } });
       return created;
     });
     const full = await prisma.payment.findUnique({ where: { id: payment.id }, include: paymentInclude });

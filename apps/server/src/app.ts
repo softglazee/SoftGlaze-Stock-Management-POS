@@ -44,8 +44,8 @@ app.use(
 );
 app.use(express.json({ limit: "50mb" })); // large enough for backup/restore snapshots
 
-// Product images etc.
-app.use("/uploads", express.static(path.join(process.cwd(), process.env.UPLOAD_DIR ?? "uploads")));
+// Product images etc. (path.resolve so an absolute UPLOAD_DIR from the desktop app is honoured)
+app.use("/uploads", express.static(path.resolve(process.cwd(), process.env.UPLOAD_DIR ?? "uploads")));
 
 // Protect auth endpoints from brute force
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 50, standardHeaders: true });

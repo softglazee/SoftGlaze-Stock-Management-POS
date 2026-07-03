@@ -6,6 +6,7 @@ import { requireAuth, requireRole } from "../middleware/auth";
 import { requirePermission } from "../middleware/permission";
 import { nextNumber } from "../utils/counter";
 import { applyMovement, InsufficientStockError } from "../lib/stock";
+import { notifyLowStock } from "../lib/notify";
 
 const router = Router();
 router.use(requireAuth);
@@ -119,6 +120,9 @@ router.post("/adjustments", requirePermission("stock.adjust"), async (req, res, 
       include: { user: { select: { name: true } }, items: { include: { product: { select: { name: true, sku: true, unit: { select: { shortName: true } } } } } } },
     });
     res.status(201).json({ ok: true, data: { adjustment: full } });
+
+    // Best-effort bell alert for anything an outward adjustment pushed to/below min.
+    notifyLowStock(body.items.filter((i) => i.qtyChange < 0).map((i) => i.productId)).catch(() => {});
   } catch (err: any) {
     if (err instanceof z.ZodError) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: err.errors[0].message } });
     if (err instanceof InsufficientStockError) return res.status(409).json({ ok: false, error: { code: err.code, message: err.message } });

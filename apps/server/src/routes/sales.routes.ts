@@ -16,6 +16,7 @@ import { roleHasPermission } from "../lib/permissions";
 import { nextNumber } from "../utils/counter";
 import { applyMovement, InsufficientStockError } from "../lib/stock";
 import { postPayment } from "../lib/accounts";
+import { notifyLowStock, createNotification } from "../lib/notify";
 
 const router = Router();
 router.use(requireAuth);
@@ -212,6 +213,8 @@ router.post("/", requirePermission("sales.create"), async (req, res, next) => {
     if (paidAmount > grandTotal + 0.01) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: "Payments exceed the bill total" } });
     const dueAmount = round2(grandTotal - paidAmount);
 
+    // Track a credit-limit override so we can raise a CREDIT_LIMIT notification after commit.
+    let overLimit: { name: string; projected: number; limit: number } | null = null;
     if (dueAmount > 0) {
       if (!customer) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: "Select a customer for credit (udhaar) sales" } });
       const projected = round2(Number(customer.balance) + dueAmount);
@@ -222,6 +225,7 @@ router.post("/", requirePermission("sales.create"), async (req, res, next) => {
         }
         const mayOverride = await roleHasPermission(req.user!.role, "sales.discount_over_limit");
         if (!mayOverride) return res.status(403).json({ ok: false, error: { code: "FORBIDDEN", message: "You are not allowed to exceed a customer's credit limit" } });
+        overLimit = { name: customer.name, projected, limit };
       }
     }
 
@@ -257,6 +261,15 @@ router.post("/", requirePermission("sales.create"), async (req, res, next) => {
     const full = await prisma.sale.findUnique({ where: { id: sale.id }, include: saleInclude });
     const canProfit = await roleHasPermission(req.user!.role, "reports.profit");
     res.status(201).json({ ok: true, data: { sale: scrubProfit(full, canProfit) } });
+
+    // After the response: raise bell alerts (best-effort, never blocks the sale).
+    const affected = computed.flatMap((c) =>
+      c.product.type === "STANDARD" ? [c.product.id] : c.product.type === "COMBO" ? c.product.comboItems.filter((ci) => ci.componentProduct.type === "STANDARD").map((ci) => ci.componentProductId) : []
+    );
+    notifyLowStock(affected).catch(() => {});
+    if (overLimit) {
+      createNotification({ type: "CREDIT_LIMIT", title: "Credit limit exceeded", message: `${overLimit.name} was sold on udhaar past their limit (₨${overLimit.limit}) — balance is now ₨${overLimit.projected}`, entity: "Customer", entityId: customer!.id }).catch(() => {});
+    }
   } catch (err: any) {
     if (err instanceof z.ZodError) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: err.errors[0].message } });
     if (err instanceof InsufficientStockError) return res.status(409).json({ ok: false, error: { code: err.code, message: err.message } });

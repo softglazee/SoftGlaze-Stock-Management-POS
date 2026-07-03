@@ -3,6 +3,30 @@
 > Living hand-off file. Updated after every module or mid-task stop.
 > Read this at the start of every session (see CLAUDE.md → Grounding & session continuity rules).
 
+## Gap-closure round + Windows installer (2026-07-03) — 10 audit gaps closed, opening-stock accounting bug FIXED ✅
+
+A 4-agent audit of every feature doc vs. code found the core 100% built (accounting sacred, price-volatility snapshots confirmed, 34/34 future items correctly NOT built early) but ~10 convenience/reporting gaps. Owner said "close all 10". Done, both apps tsc clean, and the new money path E2E-tested on a **throwaway DB** (`softglaze_gaptest`, created/migrated/seeded/dropped — real DB untouched): 12/12 checks incl. integrity all-green + balance sheet ₨0.
+
+**Gaps closed (server + web):**
+- G1 Per-line POS discount — POS cart now has a per-item discount input (server math + `SaleItem.discount` already existed; verified 10×1000 − 500 line disc → grandTotal 9500).
+- G2 Sales report filters — `/reports/sales` now takes `customerId` (invoice register for one customer) and `productId`/`categoryId` (switches to a line-item "Sales by Item" view); Reports UI has the 3 dropdowns.
+- G3 Payment allocation — customer-receipt/vendor-payment accept optional `saleId`/`purchaseId`, cap to that bill's due, update the bill's paid/due in the same tx; new `GET /payments/{customer,vendor}-bills/:id`; PaymentModal has an "Apply to invoice/bill" picker. Integrity-safe (reconciliation derives balances from grandTotal−payments, not dueAmount).
+- G4 Purchase WhatsApp + phone fix — `lib/phone.ts waNumber/waLink` (local 03xx→92…); used in POS success overlay + a new "WhatsApp vendor" button in ViewPurchase (added vendor.phone to purchaseInclude + Purchase type).
+- G5 Messages page — `pages/Messages.tsx` (lists MessageLog, channel filter) + nav + route.
+- G6 Dashboard lists + top-customers — dashboard returns `recentSales` + `lowStockItems` (rendered as two list cards); new `/reports/top-customers` report + Reports nav entry.
+- G7 Immediate low-stock — `notifyLowStock(productIds)` in `lib/notify.ts`, called fire-and-forget after a sale and after an outward stock adjustment.
+- G8 CREDIT_LIMIT bell — sale over-limit override now raises a CREDIT_LIMIT notification (deduped).
+- G9 Salary report — `/reports/salaries` (PDF/Excel) + Reports nav entry; **logo now embedded in ALL report PDFs** (`report-export.ts` reads shop_logo off disk, sharp→PNG data-URI since pdfmake can't read webp).
+- G10 My-account + email templates — `PATCH /users/me` (self name/phone/password, verifies current pw, bcrypt 12) + a "My account" modal in Layout; 4 `tmpl_email_*` keys added to INTEGRATION_KEYS + email-template fields in Settings → Integrations.
+
+**IMPORTANT accounting fix (found via the throwaway E2E):** creating a product **with opening stock** (StockMovement type `OPENING`) added inventory (asset) with NO equity counterpart → balance sheet was short by exactly the opening-stock value (integrity FAILED once real inventory is entered — which is Phase 9!). Prior integrity tests never hit it because they added stock via **purchases** (which have a cash/payable counterpart), not opening stock. Fixed in `computeBalanceSheet`: opening-stock value is now recognised as **opening capital (equity)** (`SELECT SUM(qty*unitCost) WHERE type='OPENING'`), added to equityTotal + shown as an "Opening stock" equity line on the Accounts balance sheet. Re-verified: balance sheet balances ₨0 with opening stock. Real DB (all-zero) integrity still green — no regression.
+
+**Windows installer (Phase 7 completion):** fixed 4 real packaging bugs to get `npm run dist` working — (1) `predist` used `-w apps/server` which fails from the desktop cwd → now `npm run build --prefix ../server && … ../web`; (2) electron version undetectable in the hoisted monorepo → pinned `electronVersion: "33.4.11"`; (3) an incomplete earlier `npm install` had left `app-builder-lib`/`app-builder-bin` missing → `npm install` restored them; (4) **the big one** — electron-builder's default "install production deps" step PRUNES the shared root node_modules to prod-only, deleting every devDep incl. its own tooling mid-build → moved config to `apps/desktop/electron-builder.cjs` with `beforeBuild: async () => false` + `npmRebuild: false` ("node_modules managed externally", per electron-builder docs via Context7). Also fixed a packaged-mode uploads bug (`path.join`→`path.resolve` in app.ts + lib/upload.ts, so the absolute `%APPDATA%/SoftGlaze/uploads` isn't corrupted). Slimmed extraResources (excluded electron/electron-builder/typescript/vite/esbuild/@types/etc — build-only). Build produces `apps/desktop/release/SoftGlaze-Stock-Manager-Setup-0.1.0.exe` (unsigned — fine for the owner's PC). GUI-launch + clean-PC install remain the owner's step.
+
+**Verified:** server+web tsc clean; production build clean; real-DB integrity all-green (imbalance ₨0); 36 GET endpoints + new endpoints all `ok`; PDF (now with logo)/Excel valid; Playwright sweep of the changed pages (POS/Reports/Messages/Payments/Dashboard + My-account modal + Salary/Top-Customers reports) = 0 console errors. Throwaway `softglaze_gaptest` DB dropped; scratchpad `test-gaps.cjs` is the E2E.
+
+---
+
 ## Local build-verification pass (2026-07-03) — FULL BUILD GREEN ✅ (owner wants it perfect locally before VPS)
 
 Owner directive: "build it proper and perfect first locally … make sure no errors and every feature should exist" — VPS (Phase 8) explicitly NOT now. Ran a complete clean build + runtime verification on the committed tree (`d78f104`, git clean). Nothing needed fixing — all green. No source changed; this note is the only change.

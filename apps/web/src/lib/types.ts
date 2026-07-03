@@ -117,7 +117,7 @@ export type Purchase = {
   id: string;
   invoiceNo: string;
   vendorId: string;
-  vendor?: { id: string; code: string; name: string };
+  vendor?: { id: string; code: string; name: string; phone?: string | null };
   user?: { id: string; name: string };
   refInvoiceNo: string | null;
   date: string;
@@ -355,7 +355,7 @@ export type Cashbook = { from: string; to: string; rows: CashbookRow[]; totals: 
 export type BalanceSheet = {
   assets: { cashBank: string; stockValue: string; receivables: string; vendorAdvances: string; total: string };
   liabilities: { payables: string; customerAdvances: string; total: string };
-  equity: { capital: string; drawings: string; retainedEarnings: string; total: string };
+  equity: { capital: string; openingStock: string; drawings: string; retainedEarnings: string; total: string };
   imbalance: number;
 };
 export type IntegrityCheck = { name: string; ok: boolean; detail: string };
@@ -378,6 +378,8 @@ export type DashboardData = {
   salesSeries: { date: string; sales: number; profit?: number }[];
   categoryShare: { name: string; value: number }[];
   topProducts: { name: string; value: number }[];
+  recentSales: { id: string; invoiceNo: string; date: string; customer: string; grandTotal: string; dueAmount: string }[];
+  lowStockItems: { id: string; name: string; stockQty: number; minStockLevel: number; unit: string }[];
   canProfit: boolean;
 };
 

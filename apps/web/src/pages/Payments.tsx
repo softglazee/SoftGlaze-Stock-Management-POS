@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tansta
 import { HandCoins, Banknote, ArrowDownLeft, ArrowUpRight } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import { Payment, PaymentType, Account, Customer, Vendor, Paged } from "../lib/types";
-import { fmtMoney } from "../lib/format";
+import { fmtMoney, num } from "../lib/format";
 import { useAuth } from "../context/AuthContext";
 import { PageHeader, Modal, EmptyState, TableSkeleton, SearchBox, Badge, Pagination, useToast } from "../components/ui";
 
@@ -133,15 +133,25 @@ export function PaymentModal({ mode, fixedParty, onClose, onDone }: { mode: "rec
   const [party, setParty] = useState<{ id: string; name: string; balance: string } | null>(fixedParty ?? null);
   const [methodId, setMethodId] = useState("");
   const [amount, setAmount] = useState("");
+  const [billId, setBillId] = useState("");
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const methodDefault = methodId || accounts.find((a) => a.isCash)?.id || accounts[0]?.id || "";
 
+  type OpenBill = { id: string; invoiceNo: string; date: string; grandTotal: string; dueAmount: string };
+  const { data: billsData } = useQuery({
+    queryKey: [kind + "-bills", party?.id],
+    queryFn: () => api<{ bills: OpenBill[] }>(`/payments/${kind}-bills/${party!.id}`),
+    enabled: !!party,
+  });
+  const bills = billsData?.bills ?? [];
+
   const save = useMutation({
     mutationFn: () => {
+      const alloc = billId ? (isReceive ? { saleId: billId } : { purchaseId: billId }) : {};
       const body = isReceive
-        ? { customerId: party!.id, methodId: methodDefault, amount: Number(amount), notes: notes || null }
-        : { vendorId: party!.id, methodId: methodDefault, amount: Number(amount), notes: notes || null };
+        ? { customerId: party!.id, methodId: methodDefault, amount: Number(amount), notes: notes || null, ...alloc }
+        : { vendorId: party!.id, methodId: methodDefault, amount: Number(amount), notes: notes || null, ...alloc };
       return api<{ payment: { refNo: string } }>(`/payments/${isReceive ? "customer-receipt" : "vendor-payment"}`, { method: "POST", body });
     },
     onSuccess: (d) => onDone(`${isReceive ? "Receipt" : "Payment"} ${d.payment.refNo} saved`),
@@ -153,9 +163,18 @@ export function PaymentModal({ mode, fixedParty, onClose, onDone }: { mode: "rec
       <form onSubmit={(e) => { e.preventDefault(); setError(null); if (!party) { setError(`Pick a ${kind}`); return; } save.mutate(); }} className="space-y-4">
         <div>
           <label className="label">{isReceive ? "Customer" : "Vendor"}</label>
-          {fixedParty ? <input className="input" value={fixedParty.name} disabled /> : <PartyPicker kind={kind} value={party} onChange={setParty} />}
+          {fixedParty ? <input className="input" value={fixedParty.name} disabled /> : <PartyPicker kind={kind} value={party} onChange={(p) => { setParty(p); setBillId(""); }} />}
           {party && <p className="text-xs text-muted mt-1">Current balance: <span className="money">{fmtMoney(party.balance)}</span> {isReceive ? "(owes you)" : "(you owe)"}</p>}
         </div>
+        {party && bills.length > 0 && (
+          <div>
+            <label className="label">Apply to {isReceive ? "invoice" : "bill"} (optional)</label>
+            <select className="input" value={billId} onChange={(e) => { setBillId(e.target.value); const b = bills.find((x) => x.id === e.target.value); if (b) setAmount(String(num(b.dueAmount))); }}>
+              <option value="">Whole balance (oldest first)</option>
+              {bills.map((b) => <option key={b.id} value={b.id}>{b.invoiceNo} — due {fmtMoney(b.dueAmount)} · {new Date(b.date).toLocaleDateString()}</option>)}
+            </select>
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <div><label className="label">Amount</label><input className="input mono" type="number" step="0.01" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} required autoFocus /></div>
           <div><label className="label">{isReceive ? "Received into" : "Paid from"}</label><select className="input" value={methodDefault} onChange={(e) => setMethodId(e.target.value)}>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}</select></div>

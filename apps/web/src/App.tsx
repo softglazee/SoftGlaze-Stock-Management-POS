@@ -24,6 +24,7 @@ import Reports from "./pages/Reports";
 import Users from "./pages/Users";
 import SettingsPage from "./pages/Settings";
 import Notifications from "./pages/Notifications";
+import Messages from "./pages/Messages";
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -85,6 +86,7 @@ export default function App() {
         <Route path="/reports" element={<Reports />} />
         <Route path="/users" element={<Users />} />
         <Route path="/notifications" element={<Notifications />} />
+        <Route path="/messages" element={<Messages />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>
 

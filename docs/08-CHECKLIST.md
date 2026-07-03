@@ -82,9 +82,13 @@ Tick things off as we build. Mirrors the phases in 01-BUILD-PLAN.md.
 - [x] Single-origin serving: Express serves the built web app + API on one port (SERVE_WEB / NODE_ENV=production); SPA fallback; CSP relaxed for same-origin inline styles/charts — verified (SPA at `/`, API stays JSON, unknown /api still 404)
 - [x] Electron production shell (`apps/desktop/main.cjs`): spawns the BUILT server via `ELECTRON_RUN_AS_NODE` (no separate Node needed), config file for DATABASE_URL + auto JWT secrets, uploads → `%APPDATA%/SoftGlaze/uploads`, waits for health then loads `http://localhost:4000`, single-instance lock, wa.me/http links open in the real browser, kills server on quit. Preload (context-isolated) + `SOFTGLAZE_DEV=1` live-reload mode.
 - [x] **Runtime verified**: the built `node dist/index.js` (exact process Electron spawns) boots in production mode, connects to Postgres, serves the app + API, schedules the daily cron — all clean.
-- [x] `electron-builder` NSIS config complete (bundles server/dist + web/dist + prisma + root node_modules incl. Prisma engine; `npm run dist` → `SoftGlaze-Stock-Manager-Setup-x.x.x.exe`) — see `apps/desktop/README.md`.
-- [ ] Electron GUI launch + `npm run dist` installer build + install & run on the shop PC / a clean PC — **owner step** (needs the machine/GUI; walkthrough in the README).
-- Decision pending: DB packaging for a clean PC — (A) Postgres on the PC [built, recommended], (B) bundle Postgres into the installer, or (C) switch to SQLite (needs schema change + money-math re-test).
+- [x] `electron-builder` NSIS config complete + **`npm run dist` now actually builds** `apps/desktop/release/SoftGlaze-Stock-Manager-Setup-0.1.0.exe` (config moved to `apps/desktop/electron-builder.cjs` with `beforeBuild:()=>false` + `npmRebuild:false` so it never prunes the shared node_modules; `electronVersion` pinned; `predist` uses `--prefix`; extraResources slimmed to runtime deps). Fixed a packaged-mode uploads bug (`path.join`→`path.resolve`). See `apps/desktop/README.md`.
+- [ ] Electron GUI launch + install & run on the shop PC / a clean PC — **owner step** (needs the machine/GUI; unsigned installer).
+- [x] Decision: DB packaging = **(A) Postgres on the PC** (built, recommended by owner — zero accounting risk).
+
+## Post-audit gap closure (2026-07-03)
+- [x] 4-agent audit of all feature docs vs. code → core 100% built; closed 10 convenience/reporting gaps (per-line POS discount, sales report filters by customer/product/category, payment allocation to a specific bill, purchase WhatsApp + PK phone normalisation, Messages page, dashboard recent-invoices/low-stock lists, top-customers report, immediate low-stock notification, credit-limit bell, salary report + **logo on all report PDFs**, my-account self password/name, email templates).
+- [x] **Accounting fix:** opening stock (product `openingStock`) now recognised as **opening capital (equity)** in the balance sheet — previously it added inventory with no equity counterpart, so the sheet would break the moment real inventory is entered (Phase 9). Verified on a throwaway DB: 12/12 money checks incl. integrity all-green + balance sheet ₨0.
 
 ## Phase 8 — Server
 - [ ] VPS live with HTTPS  ·  [ ] Daily DB backup cron  ·  [ ] Tested from phone browser

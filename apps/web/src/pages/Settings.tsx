@@ -244,6 +244,13 @@ function IntegrationsTab() {
           <div className="flex-1"><label className="label">Test recipient</label><input className="input" type="email" value={testTo} onChange={(e) => setTestTo(e.target.value)} placeholder="you@example.com" /></div>
           <button className="btn btn-secondary" onClick={() => test.mutate()} disabled={test.isPending || !testTo}><Send size={15} /> {test.isPending ? "Sending…" : "Test"}</button>
         </div>
+        <div className="border-t border-edge pt-3 space-y-2">
+          <p className="text-xs text-muted">Email templates — same {"{placeholders}"} as WhatsApp.</p>
+          <div><label className="label">Receipt subject</label><input className="input" value={s.tmpl_email_subject ?? "Invoice {invoice} from {shop}"} onChange={(e) => set("tmpl_email_subject", e.target.value)} /></div>
+          <div><label className="label">Receipt body</label><textarea className="input mono text-xs" rows={3} value={s.tmpl_email_body ?? "Dear {customer},\n\nYour invoice {invoice} total is {total} (paid {paid}, balance {due}).\n\nThank you,\n{shop}"} onChange={(e) => set("tmpl_email_body", e.target.value)} /></div>
+          <div><label className="label">Reminder subject</label><input className="input" value={s.tmpl_email_reminder_subject ?? "Payment reminder from {shop}"} onChange={(e) => set("tmpl_email_reminder_subject", e.target.value)} /></div>
+          <div><label className="label">Reminder body</label><textarea className="input mono text-xs" rows={3} value={s.tmpl_email_reminder_body ?? "Dear {customer},\n\nYour balance at {shop} is {due}. Kindly clear it soon.\n\nThank you."} onChange={(e) => set("tmpl_email_reminder_body", e.target.value)} /></div>
+        </div>
       </div>
 
       <div className="lg:col-span-2 flex justify-end"><button className="btn btn-secondary !border-accent !text-accent" onClick={() => save.mutate()} disabled={save.isPending}>{save.isPending ? "Saving…" : "Save integrations"}</button></div>

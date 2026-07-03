@@ -170,6 +170,40 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      {/* Recent invoices + low-stock lists */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+        <div className="card p-5">
+          <h2 className="font-semibold display mb-3">Recent invoices</h2>
+          {isLoading ? <div className="h-40"><Skeleton /></div> : (data?.recentSales.length ? (
+            <div className="divide-y divide-edge -my-1">
+              {data.recentSales.map((s) => (
+                <div key={s.id} className="flex items-center justify-between py-2 text-sm">
+                  <div className="min-w-0"><span className="mono">{s.invoiceNo}</span><span className="text-muted"> · {s.customer}</span></div>
+                  <div className="text-right whitespace-nowrap">
+                    <span className="money font-medium">{fmtMoney(s.grandTotal)}</span>
+                    {num(s.dueAmount) > 0 && <span className="text-xs text-danger ml-2">due {fmtMoney(s.dueAmount)}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : <p className="text-muted text-sm">No sales yet.</p>)}
+        </div>
+
+        <div className="card p-5">
+          <h2 className="font-semibold display mb-3 flex items-center gap-2"><PackageX size={16} className="text-accent" /> Low stock items</h2>
+          {isLoading ? <div className="h-40"><Skeleton /></div> : (data?.lowStockItems.length ? (
+            <div className="divide-y divide-edge -my-1">
+              {data.lowStockItems.map((p) => (
+                <div key={p.id} className="flex items-center justify-between py-2 text-sm">
+                  <span className="truncate">{p.name}</span>
+                  <span className="mono text-danger whitespace-nowrap">{p.stockQty} {p.unit} <span className="text-muted">· min {p.minStockLevel}</span></span>
+                </div>
+              ))}
+            </div>
+          ) : <p className="text-muted text-sm">All items are above their minimum. 👍</p>)}
+        </div>
+      </div>
     </div>
   );
 }

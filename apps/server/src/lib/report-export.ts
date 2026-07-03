@@ -6,8 +6,27 @@
  * Money is written "Rs 12,345.00" (ASCII) in files so it renders in every font.
  */
 import type { Response } from "express";
+import path from "path";
+import fs from "fs";
 import PdfPrinter from "pdfmake";
 import ExcelJS from "exceljs";
+import sharp from "sharp";
+
+const UPLOAD_ROOT = path.resolve(process.cwd(), process.env.UPLOAD_DIR ?? "uploads");
+
+/** Read the shop logo off disk and return it as a PNG data URI (pdfmake can't read webp). */
+async function logoDataUri(settings: Record<string, string>): Promise<string | null> {
+  const web = settings.shop_logo_thumb || settings.shop_logo;
+  if (!web) return null;
+  try {
+    const file = path.join(UPLOAD_ROOT, web.replace(/^\/?uploads\//, ""));
+    if (!fs.existsSync(file)) return null;
+    const png = await sharp(file).resize(160, 160, { fit: "inside" }).png().toBuffer();
+    return `data:image/png;base64,${png.toString("base64")}`;
+  } catch {
+    return null;
+  }
+}
 
 export type ReportCol = { header: string; key: string; align?: "left" | "right"; money?: boolean; width?: number };
 export type ReportRow = Record<string, string | number | null | undefined>;
@@ -43,7 +62,8 @@ function shopHeader(settings: Record<string, string>) {
   return lines;
 }
 
-export function buildPdf(doc: ReportDoc, settings: Record<string, string>): Promise<Buffer> {
+export async function buildPdf(doc: ReportDoc, settings: Record<string, string>): Promise<Buffer> {
+  const logo = await logoDataUri(settings);
   const body: any[] = [];
   // header row
   body.push(doc.columns.map((c) => ({ text: c.header, style: "th", alignment: c.align ?? "left" })));
@@ -61,7 +81,7 @@ export function buildPdf(doc: ReportDoc, settings: Record<string, string>): Prom
     defaultStyle: { font: "Helvetica", fontSize: 9, color: "#222" },
     footer: (page: number, count: number) => ({ text: `Page ${page} of ${count}`, alignment: "center", fontSize: 7, color: "#999", margin: [0, 8, 0, 0] }),
     content: [
-      { columns: [{ stack: shopHeader(settings) }, { text: new Date().toLocaleString(), alignment: "right", style: "muted" }] },
+      { columns: [...(logo ? [{ image: logo, width: 42, margin: [0, 0, 10, 0] }] : []), { stack: shopHeader(settings), width: "*" }, { text: new Date().toLocaleString(), alignment: "right", style: "muted" }] },
       { text: doc.title, style: "title", margin: [0, 12, 0, 2] },
       ...(doc.subtitle ? [{ text: doc.subtitle, style: "muted", margin: [0, 0, 0, 4] }] : []),
       ...(doc.meta && doc.meta.length ? [{ text: doc.meta.map((m) => `${m.label}: ${m.value}`).join("     "), style: "muted", margin: [0, 0, 0, 8] }] : [{ text: "", margin: [0, 0, 0, 6] }]),

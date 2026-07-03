@@ -4,7 +4,9 @@ import path from "path";
 import fs from "fs/promises";
 import crypto from "crypto";
 
-const UPLOAD_ROOT = path.join(process.cwd(), process.env.UPLOAD_DIR ?? "uploads");
+// path.resolve (not join) so an absolute UPLOAD_DIR — e.g. the desktop app's
+// %APPDATA%/SoftGlaze/uploads — is honoured as-is; a relative value still joins to cwd.
+const UPLOAD_ROOT = path.resolve(process.cwd(), process.env.UPLOAD_DIR ?? "uploads");
 
 /** Multer instance for image uploads (memory → sharp → webp on disk) */
 export const imageUpload = multer({

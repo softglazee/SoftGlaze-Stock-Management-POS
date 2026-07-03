@@ -20,6 +20,24 @@ export async function createNotification(args: { type: NotificationType; title: 
   });
 }
 
+/**
+ * Raise LOW_STOCK for any of the given products that are now at/below their minimum.
+ * Call this (fire-and-forget) right after a stock-lowering write — sale, adjustment,
+ * purchase return — so the bell reacts immediately instead of waiting for the daily
+ * sweep. Dedupes against unread notifications, so repeated sales won't spam.
+ */
+export async function notifyLowStock(productIds: string[]): Promise<void> {
+  const ids = [...new Set(productIds.filter(Boolean))];
+  if (!ids.length) return;
+  const products = await prisma.product.findMany({
+    where: { id: { in: ids }, isActive: true, type: "STANDARD", minStockLevel: { gt: 0 }, stockQty: { lte: prisma.product.fields.minStockLevel } },
+    select: { id: true, name: true, stockQty: true, minStockLevel: true, unit: { select: { shortName: true } } },
+  });
+  for (const p of products) {
+    await createNotification({ type: "LOW_STOCK", title: "Low stock", message: `${p.name} is down to ${p.stockQty} ${p.unit?.shortName ?? ""} (min ${p.minStockLevel})`, entity: "Product", entityId: p.id });
+  }
+}
+
 const DAY = 86400000;
 
 /** Scan the shop and raise notifications. Returns how many of each were created. */

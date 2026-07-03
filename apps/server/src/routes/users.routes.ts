@@ -30,6 +30,39 @@ router.get("/", requirePermission("users.manage"), async (req, res, next) => {
   }
 });
 
+const meSchema = z.object({
+  name: z.string().trim().min(2, "Name is too short").max(120).optional(),
+  phone: z.string().trim().max(25).nullable().optional(),
+  currentPassword: z.string().optional(),
+  newPassword: z.string().min(8, "New password must be at least 8 characters").optional(),
+});
+
+/** PATCH /users/me — any signed-in user updates their OWN name/phone/password (never their role).
+ *  Defined before /:id so "me" isn't captured as an id. */
+router.patch("/me", async (req, res, next) => {
+  try {
+    const body = meSchema.parse(req.body);
+    const me = await prisma.user.findUnique({ where: { id: req.user!.id }, select: { id: true, passwordHash: true } });
+    if (!me) return res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "User not found" } });
+    const data: Prisma.UserUpdateInput = {};
+    if (body.name !== undefined) data.name = body.name;
+    if (body.phone !== undefined) data.phone = body.phone;
+    if (body.newPassword) {
+      if (!body.currentPassword) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: "Enter your current password" } });
+      const ok = await bcrypt.compare(body.currentPassword, me.passwordHash);
+      if (!ok) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: "Current password is wrong" } });
+      data.passwordHash = await bcrypt.hash(body.newPassword, 12);
+      data.refreshToken = null; // sign out other devices
+    }
+    const updated = await prisma.user.update({ where: { id: me.id }, data, select });
+    await prisma.auditLog.create({ data: { userId: me.id, action: "UPDATE_PROFILE", entity: "User", entityId: me.id, details: body.newPassword ? "changed own password" : "updated own profile" } });
+    res.json({ ok: true, data: { user: updated } });
+  } catch (err: any) {
+    if (err instanceof z.ZodError) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: err.errors[0].message } });
+    next(err);
+  }
+});
+
 const createSchema = z.object({
   name: z.string().trim().min(2, "Name is too short").max(120),
   email: z.string().email("Enter a valid email"),

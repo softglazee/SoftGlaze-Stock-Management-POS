@@ -3,13 +3,14 @@ import { NavLink, Outlet, Navigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   Anvil, LayoutDashboard, ShoppingCart, Package, FolderTree, Truck, Users,
-  Receipt, Wallet, BarChart3, Settings, LogOut, Banknote, IdCard, Ruler, Tag, Boxes, Landmark, UserCog, Menu, X,
+  Receipt, Wallet, BarChart3, Settings, LogOut, Banknote, IdCard, Ruler, Tag, Boxes, Landmark, UserCog, Menu, X, MessageSquare, UserCircle,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { api } from "../lib/api";
+import { api, ApiError } from "../lib/api";
 import ThemeToggle from "./ThemeToggle";
 import Calculator from "./Calculator";
 import NotificationBell from "./NotificationBell";
+import { Modal, useToast } from "./ui";
 
 // Sidebar map — items appear as we build each phase.
 // `roles` hides links the user can't use (server still enforces).
@@ -30,6 +31,7 @@ const NAV = [
   { to: "/expenses", label: "Expenses", icon: Banknote, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "ACCOUNTANT"] },
   { to: "/employees", label: "Employees", icon: IdCard, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER"] },
   { to: "/reports", label: "Reports", icon: BarChart3, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "ACCOUNTANT"] },
+  { to: "/messages", label: "Messages", icon: MessageSquare, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER"] },
   { to: "/users", label: "Users & Roles", icon: UserCog, roles: ["SUPER_ADMIN", "ADMIN"] },
   { to: "/settings", label: "Settings", icon: Settings, roles: ["SUPER_ADMIN", "ADMIN", "ACCOUNTANT"] },
 ];
@@ -37,6 +39,7 @@ const NAV = [
 export default function Layout() {
   const { user, logout } = useAuth();
   const [navOpen, setNavOpen] = useState(false);
+  const [account, setAccount] = useState(false);
 
   // First run: the owner picks a Business Type before anything else
   const { data: settingsData } = useQuery({
@@ -129,13 +132,16 @@ export default function Layout() {
 
         <div className="p-3 border-t border-edge">
           <div className="flex items-center justify-between gap-2">
-            <div className="min-w-0">
-              <p className="text-sm font-semibold truncate">{user?.name}</p>
+            <button className="min-w-0 text-left group" onClick={() => setAccount(true)} title="My account">
+              <p className="text-sm font-semibold truncate group-hover:text-accent">{user?.name}</p>
               <p className="text-xs text-muted">{user?.role}</p>
-            </div>
+            </button>
             <div className="flex gap-1.5">
               <NotificationBell />
               <ThemeToggle />
+              <button onClick={() => setAccount(true)} className="btn btn-secondary !p-2" title="My account" aria-label="My account">
+                <UserCircle size={17} />
+              </button>
               <button onClick={logout} className="btn btn-secondary !p-2" title="Logout" aria-label="Logout">
                 <LogOut size={17} />
               </button>
@@ -143,6 +149,8 @@ export default function Layout() {
           </div>
         </div>
       </aside>
+
+      {account && <MyAccountModal onClose={() => setAccount(false)} />}
 
       {/* Content */}
       <main className="flex-1 min-w-0 p-4 lg:p-6 pt-18 lg:pt-6">
@@ -152,5 +160,54 @@ export default function Layout() {
       {/* Global calculator (also available inside POS) */}
       <Calculator />
     </div>
+  );
+}
+
+/** My account — any user edits their own name/phone and changes their password. */
+function MyAccountModal({ onClose }: { onClose: () => void }) {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [name, setName] = useState(user?.name ?? "");
+  const [phone, setPhone] = useState(user?.phone ?? "");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSaving(true);
+    try {
+      const body: Record<string, unknown> = { name, phone: phone || null };
+      if (newPassword) { body.currentPassword = currentPassword; body.newPassword = newPassword; }
+      await api("/users/me", { method: "PATCH", body });
+      toast(newPassword ? "Saved — use your new password next time you log in" : "Profile updated (name shows after your next login)");
+      onClose();
+    } catch (err) {
+      setError((err as ApiError).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal open onClose={onClose} title="My account">
+      <form onSubmit={save} className="space-y-3">
+        <div><label className="label">Name</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} required /></div>
+        <div><label className="label">Phone</label><input className="input mono" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0300 1234567" /></div>
+        <div className="text-xs text-muted">{user?.email} · {user?.role}</div>
+        <div className="border-t border-edge pt-3 space-y-3">
+          <p className="text-sm font-medium">Change password <span className="text-muted font-normal">(optional)</span></p>
+          <div><label className="label">Current password</label><input className="input" type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} autoComplete="current-password" /></div>
+          <div><label className="label">New password</label><input className="input" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} autoComplete="new-password" placeholder="At least 8 characters" /></div>
+        </div>
+        {error && <p className="text-danger text-sm">{error}</p>}
+        <div className="flex justify-end gap-2">
+          <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
+          <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? "Saving…" : "Save"}</button>
+        </div>
+      </form>
+    </Modal>
   );
 }

@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
-import { Plus, Search, X, Eye, Undo2 } from "lucide-react";
+import { Plus, Search, X, Eye, Undo2, MessageCircle } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import { Purchase, Vendor, Product, PaymentMethod, Paged } from "../lib/types";
 import { num, fmtMoney, fmtQty } from "../lib/format";
+import { waLink } from "../lib/phone";
 import { useAuth } from "../context/AuthContext";
 import { PageHeader, Modal, EmptyState, TableSkeleton, SearchBox, Badge, Pagination, useToast } from "../components/ui";
 
@@ -298,7 +299,10 @@ function ViewPurchase({ purchase, onClose, onReturned }: { purchase: Purchase; o
   const { toast } = useToast();
   const { can } = useAuth();
   const { data } = useQuery({ queryKey: ["purchase", purchase.id], queryFn: () => api<{ purchase: Purchase }>(`/purchases/${purchase.id}`) });
+  const { data: setg } = useQuery({ queryKey: ["settings-public"], queryFn: () => api<{ settings: Record<string, string> }>("/settings/public") });
   const p = data?.purchase ?? purchase;
+  const shopName = setg?.settings?.shop_name || "SoftGlaze";
+  const waHref = p.isReturn ? "" : waLink(p.vendor?.phone, `${shopName}\nBill ${p.invoiceNo}\nTotal ${fmtMoney(p.grandTotal)} · Paid ${fmtMoney(p.paidAmount)} · Balance ${fmtMoney(p.dueAmount)}\nThank you.`);
   const [returnMode, setReturnMode] = useState(false);
   const [retQty, setRetQty] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -376,6 +380,7 @@ function ViewPurchase({ purchase, onClose, onReturned }: { purchase: Purchase; o
               </button>
             </>
           )}
+          {!returnMode && waHref && <a className="btn btn-secondary" href={waHref} target="_blank" rel="noreferrer"><MessageCircle size={15} /> WhatsApp vendor</a>}
           {!returnMode && <button className="btn btn-secondary" onClick={onClose}>Close</button>}
         </div>
       </div>
