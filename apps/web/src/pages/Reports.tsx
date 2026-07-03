@@ -21,6 +21,7 @@ const REPORTS: Cfg[] = [
   { key: "salaries", label: "Salary Register", path: "/reports/salaries", icon: IdCard, period: true },
   { key: "sales-by-payment-method", label: "Sales by Payment Method", path: "/reports/sales-by-payment-method", icon: CreditCard, period: true },
   { key: "stock-movements", label: "Stock Movements", path: "/reports/stock-movements", icon: Activity, period: true },
+  { key: "pending-deliveries", label: "Pending Deliveries", path: "/reports/pending-deliveries", icon: Truck },
 ];
 
 export default function Reports() {

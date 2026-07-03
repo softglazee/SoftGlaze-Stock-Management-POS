@@ -21,6 +21,7 @@ import saleRoutes from "./routes/sales.routes";
 import accountRoutes from "./routes/accounts.routes";
 import paymentRoutes from "./routes/payments.routes";
 import chequeRoutes from "./routes/cheques.routes";
+import deliveryRoutes from "./routes/deliveries.routes";
 import ledgerRoutes from "./routes/ledger.routes";
 import expenseRoutes from "./routes/expenses.routes";
 import employeeRoutes from "./routes/employees.routes";
@@ -72,6 +73,7 @@ app.use("/api/v1/sales", saleRoutes);            // Phase 3
 app.use("/api/v1/accounts", accountRoutes);      // Phase 4 (G1 accounts, transfers, capital)
 app.use("/api/v1/payments", paymentRoutes);      // Phase 4 (customer receipts, vendor payments)
 app.use("/api/v1/cheques", chequeRoutes);        // F1 (post-dated cheque register)
+app.use("/api/v1/deliveries", deliveryRoutes);   // F2 (delivery challans)
 app.use("/api/v1/ledger", ledgerRoutes);         // Phase 4 (customer & vendor statements)
 app.use("/api/v1/expenses", expenseRoutes);      // Phase 4
 app.use("/api/v1/employees", employeeRoutes);    // Phase 4 (employees & salaries)

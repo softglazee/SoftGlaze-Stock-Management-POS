@@ -784,4 +784,35 @@ router.get("/salaries", requirePermission("reports.view"), async (req, res, next
   }
 });
 
+// ─────────────────────────── PENDING DELIVERIES (F2) ───────────────────────────
+
+/** GET /reports/pending-deliveries[&format] — sold items not yet fully dispatched. */
+router.get("/pending-deliveries", requirePermission("reports.view", "sales.view_all"), async (req, res, next) => {
+  try {
+    const items = await prisma.saleItem.findMany({
+      where: { sale: { status: "COMPLETED", isReturn: false }, product: { type: { not: "SERVICE" } } },
+      select: { id: true, qty: true, product: { select: { name: true } }, sale: { select: { invoiceNo: true, date: true, customer: { select: { name: true } } } } },
+      orderBy: { sale: { date: "asc" } },
+    });
+    const delivered = await prisma.deliveryNoteItem.groupBy({ by: ["saleItemId"], where: { deliveryNote: { status: "DELIVERED" } }, _sum: { qty: true } });
+    const dmap = new Map(delivered.map((d) => [d.saleItemId, num(d._sum.qty)]));
+    const rows = items
+      .map((it) => { const sold = num(it.qty); const done = dmap.get(it.id) ?? 0; return { date: it.sale.date.toLocaleDateString("en-GB"), invoiceNo: it.sale.invoiceNo, customer: it.sale.customer?.name ?? "Walk-in", product: it.product.name, sold, delivered: done, pending: r2(sold - done) }; })
+      .filter((r) => r.pending > 0.001);
+    const columns = [
+      { header: "Date", key: "date" },
+      { header: "Invoice", key: "invoiceNo" },
+      { header: "Customer", key: "customer" },
+      { header: "Product", key: "product" },
+      { header: "Sold", key: "sold", align: "right" as const },
+      { header: "Delivered", key: "delivered", align: "right" as const },
+      { header: "Pending", key: "pending", align: "right" as const },
+    ];
+    const totals = { date: "Total", sold: r2(rows.reduce((a, r) => a + r.sold, 0)), delivered: r2(rows.reduce((a, r) => a + r.delivered, 0)), pending: r2(rows.reduce((a, r) => a + r.pending, 0)) };
+    return sendReport(res, fmtReq(req), "pending-deliveries", { title: "Pending Deliveries", meta: [{ label: "As of", value: new Date().toLocaleDateString("en-GB") }], columns, rows, totals }, await loadSettings());
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;

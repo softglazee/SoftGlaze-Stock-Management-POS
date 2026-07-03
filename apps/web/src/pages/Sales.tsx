@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
-import { Eye, Undo2, Printer } from "lucide-react";
+import { Eye, Undo2, Printer, Truck } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import { Sale, Paged } from "../lib/types";
 import { num, fmtMoney, fmtQty } from "../lib/format";
 import { useAuth } from "../context/AuthContext";
 import { PageHeader, Modal, EmptyState, TableSkeleton, SearchBox, Badge, Pagination, useToast } from "../components/ui";
 import { printReceipt } from "../lib/receipt";
+import DispatchModal from "../components/DispatchModal";
 
 function statusBadge(s: Sale) {
   if (s.isReturn) return <Badge tone="warn">Return</Badge>;
@@ -103,6 +104,7 @@ function ViewSale({ sale, onClose, onReturned }: { sale: Sale; onClose: () => vo
   const [returnMode, setReturnMode] = useState(false);
   const [retQty, setRetQty] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const [dispatch, setDispatch] = useState(false);
 
   const doReturn = useMutation({
     mutationFn: () => {
@@ -164,6 +166,7 @@ function ViewSale({ sale, onClose, onReturned }: { sale: Sale; onClose: () => vo
         <div className="flex flex-wrap justify-end gap-2">
           {!returnMode && <button className="btn btn-secondary" onClick={() => printReceipt(s, "80mm", settingsData?.settings ?? {})}><Printer size={15} /> 80mm</button>}
           {!returnMode && <button className="btn btn-secondary" onClick={() => printReceipt(s, "a4", settingsData?.settings ?? {})}><Printer size={15} /> A4 / PDF</button>}
+          {!returnMode && !s.isReturn && s.status === "COMPLETED" && can("sales.create") && <button className="btn btn-secondary" onClick={() => setDispatch(true)}><Truck size={15} /> Dispatch / Challan</button>}
           {canReturn && !returnMode && <button className="btn btn-secondary" onClick={() => setReturnMode(true)}><Undo2 size={15} /> Return items</button>}
           {returnMode && (
             <>
@@ -174,6 +177,7 @@ function ViewSale({ sale, onClose, onReturned }: { sale: Sale; onClose: () => vo
           {!returnMode && <button className="btn btn-secondary" onClick={onClose}>Close</button>}
         </div>
       </div>
+      {dispatch && <DispatchModal sale={s} onClose={() => setDispatch(false)} />}
     </Modal>
   );
 }

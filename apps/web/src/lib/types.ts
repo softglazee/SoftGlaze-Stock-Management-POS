@@ -297,6 +297,26 @@ export type Cheque = {
 };
 export type ChequeSummary = { groups: { direction: string; status: string; count: number; amount: string }[]; dueSoon: number };
 
+// ── Delivery challans (F2) ──
+export type DeliveryNote = {
+  id: string;
+  refNo: string;
+  saleId: string;
+  date: string;
+  driverName: string | null;
+  vehicleNo: string | null;
+  receiverName: string | null;
+  notes: string | null;
+  status: "DELIVERED" | "CANCELLED";
+  sale?: { id: string; invoiceNo: string; date: string; customer?: { name: string; phone: string | null } | null };
+  user?: { name: string };
+  items: { id: string; saleItemId: string; qty: string; saleItem?: { product?: { name: string; sku: string; unit?: { shortName: string } } } }[];
+};
+export type DeliveryPending = {
+  sale: { id: string; invoiceNo: string; customer: string };
+  lines: { saleItemId: string; product: string; sku: string; unit: string; sold: number; delivered: number; remaining: number }[];
+};
+
 // ── Ledgers / statements ──
 export type LedgerEntry = { date: string; refNo: string; type: string; description: string; debit: number; credit: number; balance: number };
 export type CustomerLedger = { customer: Customer; balance: string; opening: number; closing: number; totalDebit: number; totalCredit: number; entries: LedgerEntry[] };

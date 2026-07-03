@@ -43,6 +43,7 @@ model User {
   fundTransfers  FundTransfer[]
   capitalEntries CapitalEntry[]
   cheques        Cheque[]
+  deliveryNotes  DeliveryNote[]
   leaveApprovals LeaveRequest[]  @relation("LeaveApprover")
 }
 
@@ -305,8 +306,9 @@ model Sale {
   returnOfId  String?                                      // original sale if return
   createdAt   DateTime   @default(now())
 
-  items       SaleItem[]
-  payments    Payment[]
+  items         SaleItem[]
+  payments      Payment[]
+  deliveryNotes DeliveryNote[]
 
   @@index([date])
   @@index([customerId])
@@ -325,6 +327,8 @@ model SaleItem {
   discount  Decimal @default(0) @db.Decimal(18, 2)
   taxAmount Decimal @default(0) @db.Decimal(18, 2)
   total     Decimal @db.Decimal(18, 2)
+
+  deliveries DeliveryNoteItem[]
 }
 
 // ─────────────────────────── PAYMENTS & MONEY ───────────────────────────
@@ -496,6 +500,46 @@ model Cheque {
 
   @@index([status])
   @@index([chequeDate])
+}
+
+// ─────────────────────────── DELIVERY CHALLANS (F2) ───────────────────────────
+// A dispatch note against a sale. Materials ship by truck in partial loads, so one
+// invoice can have several challans. Stock already moved at invoice time, so a challan
+// carries NO money/stock effect — it only records what physically went out, and the
+// invoice shows Delivered/Pending from the sum of its challans.
+enum DeliveryStatus {
+  DELIVERED
+  CANCELLED
+}
+
+model DeliveryNote {
+  id           String             @id @default(cuid())
+  refNo        String             @unique // CHL-000001
+  saleId       String
+  sale         Sale               @relation(fields: [saleId], references: [id])
+  date         DateTime           @default(now())
+  driverName   String?
+  vehicleNo    String?
+  receiverName String?
+  notes        String?
+  status       DeliveryStatus     @default(DELIVERED)
+  userId       String
+  user         User               @relation(fields: [userId], references: [id])
+  createdAt    DateTime           @default(now())
+
+  items DeliveryNoteItem[]
+
+  @@index([saleId])
+  @@index([date])
+}
+
+model DeliveryNoteItem {
+  id             String       @id @default(cuid())
+  deliveryNoteId String
+  deliveryNote   DeliveryNote @relation(fields: [deliveryNoteId], references: [id], onDelete: Cascade)
+  saleItemId     String
+  saleItem       SaleItem     @relation(fields: [saleItemId], references: [id])
+  qty            Decimal      @db.Decimal(18, 3)
 }
 
 model ExpenseCategory {
