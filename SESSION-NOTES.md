@@ -3,6 +3,22 @@
 > Living hand-off file. Updated after every module or mid-task stop.
 > Read this at the start of every session (see CLAUDE.md → Grounding & session continuity rules).
 
+## Local build-verification pass (2026-07-03) — FULL BUILD GREEN ✅ (owner wants it perfect locally before VPS)
+
+Owner directive: "build it proper and perfect first locally … make sure no errors and every feature should exist" — VPS (Phase 8) explicitly NOT now. Ran a complete clean build + runtime verification on the committed tree (`d78f104`, git clean). Nothing needed fixing — all green. No source changed; this note is the only change.
+
+- **Builds (rule 9):** `apps/server` `tsc --noEmit` CLEAN + `npm run build` → `dist/index.js`. `apps/web` `tsc --noEmit` CLEAN + `tsc -b && vite build` → `dist/` (⚠ single JS chunk 983 kB / 267 kB gzip — a warning, not an error; optional future `manualChunks` split before VPS).
+- **DB:** portable Postgres 16.9 up on 5432; `prisma migrate status` → "up to date" (3 migrations). Schema current.
+- **Runtime (built `node dist/index.js` on spare port 4300, NODE_ENV=production — the exact desktop process):** `GET /reports/integrity` **all-green 8/8**, balance sheet ₨0 (clean owner-ready DB: 3 sample products, 5 accounts, 0 sales/purchases/customers). 36/36 GET endpoints returned `ok:true` (products, customers, vendors, categories, brands, units, accounts, payment-methods, expenses(+categories), employees, hr(departments/shifts/holidays/leaves), sales, purchases, stock/movements, all 10 reports + dashboard + cashbook, users, permissions/matrix, notifications(+unread-count), messages, audit, settings/public, backup/summary). **PDF export** = valid `%PDF-` (application/pdf); **Excel export** = valid `PK`/xlsx. **Single-origin SPA**: `/` serves HTML, `/settings` deep-link falls back to index.html, unknown `/api/*` → JSON 404 (desktop mode proven).
+- **UI (Playwright on the production build at :4300, dev JWT injected):** every page renders — Dashboard, Reports, Accounts, Employees, Settings (all 6 tabs), Purchases, Products, POS, Users, Customers, Notifications. **0 console errors** in a fresh session across login→Settings→Roles&Permissions tab→POS→Reports. Confirmed the Settings **PermissionsTab `<Fragment key={g}>` fix is live** (the "unique key" warning seen earlier was stale history from an old :5173 dev session, not this build).
+- **Feature inventory:** 25/25 server route files mounted in `app.ts`; 22/22 web pages routed in `App.tsx`. All core scope present.
+- **Intentionally-deferred (documented, NOT bugs — none block this shop's launch):** A7 medical batch/expiry FEFO (owner is building-materials), G4 warranty fields (needs schema), G5 camera-barcode + weighing-scale (hardware-flagged; USB keyboard-wedge scanners already work into POS F2 search), A6 demo-data pack (dev convenience), G9 display-currency switcher (books PKR-locked). Offer these to the owner; build only if requested.
+- **Cleanup:** test server (PID) stopped, browser closed, dev token in scratchpad (60-min). DB untouched (no test writes — verification was read-only/GETs + a throwaway health boot).
+
+**Next:** owner confirms; optionally build any deferred extra they want; then Phase 7 installer (`npm install` → `npm run build` → `npm run desktop` → `cd apps/desktop && npm run dist`) on their machine, then Phase 8 (VPS) only on explicit "go" + server access.
+
+---
+
 ## Current status (2026-07-03) — Phase 7 WIRED ✅ (Desktop) — installer build + clean-PC test are owner steps
 
 Also fixed: server `tsconfig.json` moduleResolution `node`→`nodenext` (+ module `nodenext`) to clear the TS 7.0 deprecation; tsc clean.
