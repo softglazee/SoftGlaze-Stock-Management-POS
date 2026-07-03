@@ -815,4 +815,51 @@ router.get("/pending-deliveries", requirePermission("reports.view", "sales.view_
   }
 });
 
+// ─────────────────────────── OPEN BOOKINGS (F3) ───────────────────────────
+
+/** GET /reports/open-bookings[&format] — live advance bookings, advances held, value still owed. */
+router.get("/open-bookings", requirePermission("reports.view", "sales.view_all"), async (req, res, next) => {
+  try {
+    const bookings = await prisma.booking.findMany({
+      where: { status: { in: ["OPEN", "PARTIAL"] } },
+      include: { customer: { select: { name: true } }, items: { select: { qty: true, qtyFulfilled: true, unitPrice: true } } },
+      orderBy: { date: "asc" },
+    });
+    const rows = bookings.map((b) => {
+      const valueFulfilled = r2(b.items.reduce((s, it) => s + num(it.qtyFulfilled) * num(it.unitPrice), 0));
+      const advanceRemaining = r2(Math.max(0, num(b.advanceReceived) - valueFulfilled));
+      const outstanding = r2(num(b.bookedValue) - valueFulfilled);
+      return {
+        date: b.date.toLocaleDateString("en-GB"),
+        refNo: b.refNo,
+        customer: b.customer.name,
+        status: b.status.toLowerCase(),
+        validUntil: b.validUntil ? b.validUntil.toLocaleDateString("en-GB") : "—",
+        booked: num(b.bookedValue),
+        advanceHeld: advanceRemaining,
+        outstanding,
+      };
+    });
+    const columns = [
+      { header: "Date", key: "date" },
+      { header: "Booking", key: "refNo" },
+      { header: "Customer", key: "customer" },
+      { header: "Status", key: "status" },
+      { header: "Rate valid till", key: "validUntil" },
+      { header: "Booked value", key: "booked", align: "right" as const, money: true },
+      { header: "Advance held", key: "advanceHeld", align: "right" as const, money: true },
+      { header: "Still to deliver", key: "outstanding", align: "right" as const, money: true },
+    ];
+    const totals = {
+      date: "Total",
+      booked: r2(rows.reduce((a, r) => a + r.booked, 0)),
+      advanceHeld: r2(rows.reduce((a, r) => a + r.advanceHeld, 0)),
+      outstanding: r2(rows.reduce((a, r) => a + r.outstanding, 0)),
+    };
+    return sendReport(res, fmtReq(req), "open-bookings", { title: "Open Bookings", meta: [{ label: "As of", value: new Date().toLocaleDateString("en-GB") }], columns, rows, totals }, await loadSettings());
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;

@@ -317,6 +317,37 @@ export type DeliveryPending = {
   lines: { saleItemId: string; product: string; sku: string; unit: string; sold: number; delivered: number; remaining: number }[];
 };
 
+// ── Advance bookings (F3) ──
+export type BookingStatus = "OPEN" | "PARTIAL" | "COMPLETED" | "CANCELLED";
+export type BookingItem = {
+  id: string;
+  productId: string;
+  product?: { id: string; name: string; sku: string; type: ProductType; salePrice: string; unit?: { shortName: string } };
+  qty: string;
+  unitPrice: string;
+  qtyFulfilled: string;
+};
+export type Booking = {
+  id: string;
+  refNo: string;
+  customerId: string;
+  customer?: { id: string; code: string; name: string; phone: string | null };
+  date: string;
+  validUntil: string | null;
+  status: BookingStatus;
+  bookedValue: string;
+  advanceReceived: string;
+  notes: string | null;
+  user?: { id: string; name: string };
+  items: BookingItem[];
+  sales?: { id: string; invoiceNo: string; date: string; grandTotal: string; status: string; isReturn: boolean }[];
+  // server-computed
+  valueFulfilled: number;
+  advanceRemaining: number;
+  outstanding: number;
+};
+export type BookingSummary = { openCount: number; advancesHeld: number; outstandingValue: number };
+
 // ── Ledgers / statements ──
 export type LedgerEntry = { date: string; refNo: string; type: string; description: string; debit: number; credit: number; balance: number };
 export type CustomerLedger = { customer: Customer; balance: string; opening: number; closing: number; totalDebit: number; totalCredit: number; entries: LedgerEntry[] };

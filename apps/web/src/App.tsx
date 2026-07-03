@@ -19,6 +19,7 @@ import Vendors from "./pages/Vendors";
 import Accounts from "./pages/Accounts";
 import Payments from "./pages/Payments";
 import Cheques from "./pages/Cheques";
+import Bookings from "./pages/Bookings";
 import Expenses from "./pages/Expenses";
 import Employees from "./pages/Employees";
 import Reports from "./pages/Reports";
@@ -83,6 +84,7 @@ export default function App() {
         <Route path="/accounts" element={<Accounts />} />
         <Route path="/payments" element={<Payments />} />
         <Route path="/cheques" element={<Cheques />} />
+        <Route path="/bookings" element={<Bookings />} />
         <Route path="/expenses" element={<Expenses />} />
         <Route path="/employees" element={<Employees />} />
         <Route path="/reports" element={<Reports />} />
