@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import path from "path";
+import fs from "fs";
 import rateLimit from "express-rate-limit";
 import authRoutes from "./routes/auth.routes";
 import unitRoutes from "./routes/units.routes";
@@ -32,7 +33,9 @@ import backupRoutes from "./routes/backup.routes";
 
 const app = express();
 
-app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
+// CSP is disabled because in desktop/single-origin mode Express serves the SPA, which
+// relies on inline styles (charts, dynamic colours). Other helmet protections stay on.
+app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" }, contentSecurityPolicy: false }));
 app.use(
   cors({
     origin: process.env.CORS_ORIGIN?.split(",") ?? "http://localhost:5173",
@@ -77,6 +80,21 @@ app.use("/api/v1/notifications", notificationRoutes); // Phase 6 (bell + reminde
 app.use("/api/v1/messages", messageRoutes);      // Phase 6 (WhatsApp/email log)
 app.use("/api/v1/audit", auditRoutes);           // Phase 6 (audit log viewer)
 app.use("/api/v1/backup", backupRoutes);         // Phase 6 (backup / restore)
+
+/**
+ * Serve the built web app on the same origin (Phase 7 desktop mode + optional single-
+ * origin server mode). Enabled by SERVE_WEB=1 or NODE_ENV=production when the build
+ * exists. SPA routes fall back to index.html; /api and /uploads are left untouched.
+ */
+const webDist = path.resolve(process.env.WEB_DIST ?? path.join(process.cwd(), "../web/dist"));
+if ((process.env.SERVE_WEB === "1" || process.env.NODE_ENV === "production") && fs.existsSync(webDist)) {
+  app.use(express.static(webDist));
+  app.get("*", (req, res, next) => {
+    if (req.path.startsWith("/api") || req.path.startsWith("/uploads")) return next();
+    res.sendFile(path.join(webDist, "index.html"));
+  });
+  console.log(`🖥️  Serving web app from ${webDist}`);
+}
 
 // 404 + error handler
 app.use((_req, res) => res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "Route not found" } }));

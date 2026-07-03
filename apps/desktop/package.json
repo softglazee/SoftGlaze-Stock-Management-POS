@@ -3,25 +3,45 @@
   "version": "0.1.0",
   "private": true,
   "main": "main.cjs",
-  "description": "SoftGlaze desktop shell (Electron) — wraps the same server + web app",
+  "description": "SoftGlaze Stock Manager — Windows desktop shell (Electron)",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win"
+    "predist": "npm run build -w apps/server && npm run build -w apps/web",
+    "dist": "electron-builder --win nsis",
+    "pack": "electron-builder --dir"
   },
   "devDependencies": {
-    "electron": "^33.2.0",
+    "electron": "^33.2.1",
     "electron-builder": "^25.1.8"
   },
   "build": {
     "appId": "com.softglaze.stockmanager",
     "productName": "SoftGlaze Stock Manager",
-    "directories": { "output": "release" },
-    "files": ["main.cjs", "preload.cjs"],
-    "extraResources": [
-      { "from": "../server/dist", "to": "server" },
-      { "from": "../web/dist", "to": "web" }
+    "artifactName": "SoftGlaze-Stock-Manager-Setup-${version}.${ext}",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.cjs",
+      "preload.cjs"
     ],
-    "win": { "target": "nsis" },
-    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true }
+    "extraResources": [
+      { "from": "../../node_modules", "to": "node_modules", "filter": ["**/*", "!**/*.map", "!**/.cache/**", "!.bin/**"] },
+      { "from": "../server/dist", "to": "server/dist" },
+      { "from": "../server/prisma", "to": "server/prisma" },
+      { "from": "../web/dist", "to": "web/dist" }
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "SoftGlaze Stock Manager"
+    }
   }
 }

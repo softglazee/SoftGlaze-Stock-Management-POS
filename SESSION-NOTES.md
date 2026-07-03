@@ -3,7 +3,23 @@
 > Living hand-off file. Updated after every module or mid-task stop.
 > Read this at the start of every session (see CLAUDE.md → Grounding & session continuity rules).
 
-## Current status (2026-07-02) — Phase 6 COMPLETE ✅ (Admin & Integrations)
+## Current status (2026-07-03) — Phase 7 WIRED ✅ (Desktop) — installer build + clean-PC test are owner steps
+
+Also fixed: server `tsconfig.json` moduleResolution `node`→`nodenext` (+ module `nodenext`) to clear the TS 7.0 deprecation; tsc clean.
+
+**Single-origin serving (server):** `app.ts` now serves the built web app (`apps/web/dist`) + API on ONE origin when `SERVE_WEB=1` or `NODE_ENV=production` and the build exists — `express.static` + SPA fallback (`/api` & `/uploads` excluded), `WEB_DIST` overridable. helmet `contentSecurityPolicy: false` (the SPA needs inline styles for charts/dynamic colours; self-hosted/desktop threat model). Verified: `/` serves HTML+assets, `/settings` falls back to index.html, `/api/*` stays JSON incl. 404. This also enables an optional single-origin server deployment (VPS still uses nginx).
+
+**Desktop (`apps/desktop/`):** rewrote the Phase-0 stub into a production Electron shell. `main.cjs`: spawns the built server with `process.execPath` + `ELECTRON_RUN_AS_NODE=1` (Electron's Node runs it — clean PC needs no Node), env `SERVE_WEB/WEB_DIST/UPLOAD_DIR(%APPDATA%/SoftGlaze/uploads)/PORT/DATABASE_URL/JWT_*`; config file `%APPDATA%/SoftGlaze/softglaze.config.json` (auto DATABASE_URL default = local pg + random JWT secrets on first run); waits `/api/v1/health` (45s, friendly error dialog with log tail if DB down); loads `http://localhost:4000`; single-instance lock; `setWindowOpenHandler` sends http/wa.me links to the system browser but allows blank print windows; kills server on quit. `preload.cjs` (contextIsolation, exposes `window.softglaze`). `package.json`: electron@33.2.1 + electron-builder@25.1.8 (both verified to exist), `predist` builds server+web, `dist` → NSIS `SoftGlaze-Stock-Manager-Setup-${version}.exe`; extraResources bundle server/dist + web/dist + server/prisma + **root** node_modules (workspace hoisting → runtime deps + Prisma engine live there). `.gitignore` (release/), README with build/test walkthrough.
+
+**Verified (rule-2):** built `node dist/index.js` (the exact process Electron spawns) runs in production mode on a spare port, connects to Postgres, serves app+API+cron, no errors. NOT yet run: the Electron GUI window and the actual `electron-builder dist` (both need the owner's machine/GUI + a clean-PC install — that's the phase's "test on shop PC" step). electron/electron-builder not yet `npm install`ed in the workspace (owner runs `npm install` before `npm run desktop`/`dist`).
+
+**Open decision (docs/07 flagged it as joint):** DB packaging for a clean PC — (A) Postgres on the PC [built now, zero accounting risk, recommended for the owner's single shop PC], (B) bundle portable Postgres into the installer for true one-click, or (C) switch Prisma to SQLite (schema change: drop `@db.Decimal`, re-run migrations, re-verify all money math). Ask the owner before doing B or C.
+
+**Next:** owner runs `npm install` + `npm run build` + `npm run desktop` to see it as a window, then `cd apps/desktop && npm run dist` to build the installer and test on the shop PC. Then Phase 8 (VPS + HTTPS + daily backup) and Phase 9 (launch). Do NOT start Phase 8 without the owner's "go" + server access.
+
+---
+
+## Phase 6 COMPLETE ✅ (Admin & Integrations)
 
 No schema change (all Phase 6 models existed). New deps: nodemailer, node-cron (+types). Both apps tsc clean; backend verified 21/21 (users CRUD + role rules, integration secret masking, graceful SMTP-test failure + logging, message log, notification sweep, audit 103 entries, **backup export→wipe→restore round-trip with integrity all-green**); web smoke (Users + all 6 Settings tabs + bell, 0 console errors). Test residue cleaned (1 owner user, integrity ₨0).
 
