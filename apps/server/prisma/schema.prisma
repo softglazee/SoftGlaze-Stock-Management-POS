@@ -153,6 +153,7 @@ model Product {
   comboItems     ComboItem[] @relation("ComboParent")     // components of THIS combo
   usedInCombos   ComboItem[] @relation("ComboComponent")  // combos that include this product
   bookingItems   BookingItem[]
+  estimatorItems EstimatorItem[]
 
   @@index([name])
   @@index([categoryId])
@@ -594,6 +595,37 @@ model BookingItem {
   qty          Decimal @db.Decimal(18, 3) // booked quantity
   unitPrice    Decimal @db.Decimal(18, 2) // LOCKED rate — never changes if prices move
   qtyFulfilled Decimal @default(0) @db.Decimal(18, 3) // delivered/invoiced so far
+}
+
+// ─────────────────────── CONSTRUCTION ESTIMATOR (F4) ───────────────────────
+// The "sales weapon": a walk-in says "I'm building X" and the shop instantly gets a
+// materials list with live prices, one click away from a quotation. A template is a
+// structure type (RCC slab, brick wall, grey-structure per marla…) holding engineering
+// coefficients that map to REAL catalog products. Estimate = coefficient × (area × floors)
+// × the product's current sale price. No money/stock effect — it only reads prices; the
+// quotation it produces is a normal QUOTATION Sale (snapshots only). Coefficients are
+// editable by admins because rates differ by region/engineer.
+model EstimatorTemplate {
+  id               String          @id @default(cuid())
+  name             String          @unique // "RCC Slab (6\")", "Grey structure / marla"
+  description      String?
+  areaLabel        String          @default("Area (sq ft)") // what the area input means
+  multiplyByFloors Boolean         @default(true) // total units = area × floors (else just area)
+  sortOrder        Int             @default(0)
+  isActive         Boolean         @default(true)
+  createdAt        DateTime        @default(now())
+  items            EstimatorItem[]
+}
+
+model EstimatorItem {
+  id         String            @id @default(cuid())
+  templateId String
+  template   EstimatorTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product           @relation(fields: [productId], references: [id])
+  qtyPerUnit Decimal           @db.Decimal(18, 4) // qty of this product per 1 unit of (area × floors)
+  note       String? // e.g. "12mm steel", "for 6\" slab"
+  sortOrder  Int               @default(0)
 }
 
 model ExpenseCategory {

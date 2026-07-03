@@ -23,6 +23,7 @@ import paymentRoutes from "./routes/payments.routes";
 import chequeRoutes from "./routes/cheques.routes";
 import deliveryRoutes from "./routes/deliveries.routes";
 import bookingRoutes from "./routes/bookings.routes";
+import estimatorRoutes from "./routes/estimator.routes";
 import ledgerRoutes from "./routes/ledger.routes";
 import expenseRoutes from "./routes/expenses.routes";
 import employeeRoutes from "./routes/employees.routes";
@@ -76,6 +77,7 @@ app.use("/api/v1/payments", paymentRoutes);      // Phase 4 (customer receipts, 
 app.use("/api/v1/cheques", chequeRoutes);        // F1 (post-dated cheque register)
 app.use("/api/v1/deliveries", deliveryRoutes);   // F2 (delivery challans)
 app.use("/api/v1/bookings", bookingRoutes);      // F3 (advance bookings with rate lock)
+app.use("/api/v1/estimator", estimatorRoutes);   // F4 (construction material estimator)
 app.use("/api/v1/ledger", ledgerRoutes);         // Phase 4 (customer & vendor statements)
 app.use("/api/v1/expenses", expenseRoutes);      // Phase 4
 app.use("/api/v1/employees", employeeRoutes);    // Phase 4 (employees & salaries)

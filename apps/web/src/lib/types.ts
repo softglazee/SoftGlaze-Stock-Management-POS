@@ -348,6 +348,29 @@ export type Booking = {
 };
 export type BookingSummary = { openCount: number; advancesHeld: number; outstandingValue: number };
 
+// ── Construction estimator (F4) ──
+export type EstimatorItem = {
+  id: string;
+  productId: string;
+  product?: { id: string; name: string; sku: string; salePrice: string; isActive: boolean; unit?: { shortName: string } };
+  qtyPerUnit: string;
+  note: string | null;
+  sortOrder: number;
+};
+export type EstimatorTemplate = {
+  id: string;
+  name: string;
+  description: string | null;
+  areaLabel: string;
+  multiplyByFloors: boolean;
+  sortOrder: number;
+  isActive: boolean;
+  items: EstimatorItem[];
+};
+export type EstimatorPreset = { key: string; name: string; description: string; areaLabel: string; multiplyByFloors: boolean; rows: { label: string; unitHint: string; qtyPerUnit: number }[] };
+export type EstimateLine = { productId: string; name: string; sku: string; unit: string; active: boolean; note: string | null; qtyPerUnit: number; qty: number; unitPrice: number; lineTotal: number };
+export type EstimateResult = { template: { id: string; name: string; areaLabel: string; multiplyByFloors: boolean }; area: number; floors: number; totalUnits: number; lines: EstimateLine[]; grandTotal: number };
+
 // ── Ledgers / statements ──
 export type LedgerEntry = { date: string; refNo: string; type: string; description: string; debit: number; credit: number; balance: number };
 export type CustomerLedger = { customer: Customer; balance: string; opening: number; closing: number; totalDebit: number; totalCredit: number; entries: LedgerEntry[] };
