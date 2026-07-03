@@ -403,10 +403,40 @@ export type SalaryPayment = {
   baseAmount: string;
   bonus: string;
   deduction: string;
+  absentDeduction: string;
+  advanceRecovered: string;
   netPaid: string;
   date: string;
   notes: string | null;
   user?: { name: string };
+};
+
+// ── Attendance & staff advances (F5) ──
+export type AttendanceStatus = "PRESENT" | "ABSENT" | "HALF_DAY" | "LEAVE";
+export type Attendance = { id: string; employeeId: string; employee?: { id: string; code: string; name: string }; date: string; status: AttendanceStatus; note: string | null };
+export type AttendanceSummaryRow = { employeeId: string; code: string; name: string; present: number; absent: number; half: number; leave: number };
+export type AttendanceSummary = { month: string; daysInMonth: number; rows: AttendanceSummaryRow[] };
+export type EmployeeAdvance = {
+  id: string;
+  refNo: string;
+  employeeId: string;
+  amount: string;
+  date: string;
+  notes: string | null;
+  method?: { name: string };
+  recoveredInId: string | null;
+  recoveredIn?: { refNo: string; month: string } | null;
+};
+export type SalaryPreview = {
+  month: string;
+  base: number;
+  daysInMonth: number;
+  perDay: number;
+  attendance: { present: number; absent: number; half: number; leave: number };
+  suggestedAbsentDeduction: number;
+  openAdvances: { id: string; refNo: string; amount: string; date: string }[];
+  openAdvanceTotal: number;
+  alreadyPaid: string | null;
 };
 export type Employee = {
   id: string;
@@ -447,7 +477,7 @@ export type Holiday = { id: string; date: string; name: string };
 export type CashbookRow = { accountId: string; name: string; isCash: boolean; opening: string; moneyIn: string; moneyOut: string; closing: string };
 export type Cashbook = { from: string; to: string; rows: CashbookRow[]; totals: { opening: string; moneyIn: string; moneyOut: string; closing: string } };
 export type BalanceSheet = {
-  assets: { cashBank: string; stockValue: string; receivables: string; vendorAdvances: string; total: string };
+  assets: { cashBank: string; stockValue: string; receivables: string; vendorAdvances: string; employeeAdvances: string; total: string };
   liabilities: { payables: string; customerAdvances: string; total: string };
   equity: { capital: string; openingStock: string; openingBalances: string; drawings: string; retainedEarnings: string; total: string };
   imbalance: number;

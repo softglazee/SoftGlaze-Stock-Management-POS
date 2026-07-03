@@ -27,6 +27,7 @@ import estimatorRoutes from "./routes/estimator.routes";
 import ledgerRoutes from "./routes/ledger.routes";
 import expenseRoutes from "./routes/expenses.routes";
 import employeeRoutes from "./routes/employees.routes";
+import attendanceRoutes from "./routes/attendance.routes";
 import hrRoutes from "./routes/hr.routes";
 import reportRoutes from "./routes/reports.routes";
 import userRoutes from "./routes/users.routes";
@@ -81,6 +82,7 @@ app.use("/api/v1/estimator", estimatorRoutes);   // F4 (construction material es
 app.use("/api/v1/ledger", ledgerRoutes);         // Phase 4 (customer & vendor statements)
 app.use("/api/v1/expenses", expenseRoutes);      // Phase 4
 app.use("/api/v1/employees", employeeRoutes);    // Phase 4 (employees & salaries)
+app.use("/api/v1/attendance", attendanceRoutes); // F5 (attendance)
 app.use("/api/v1/hr", hrRoutes);                 // Phase 4 (G6 departments/shifts/leaves/holidays)
 app.use("/api/v1/reports", reportRoutes);        // Phase 4 slice + Phase 5 reports
 app.use("/api/v1/users", userRoutes);            // Phase 6 (users & roles)

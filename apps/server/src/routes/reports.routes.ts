@@ -192,7 +192,7 @@ router.get("/integrity", requirePermission("reports.view"), async (_req, res, ne
 // ─────────────────────────── BALANCE SHEET ───────────────────────────
 
 async function computeBalanceSheet() {
-  const [accounts, products, customers, vendors, capital, salesProfit, retProfit, expenseAgg, purAgg, purItems, adjMoves] = await Promise.all([
+  const [accounts, products, customers, vendors, capital, salesProfit, retProfit, expenseAgg, purAgg, purItems, adjMoves, openAdvAgg] = await Promise.all([
     prisma.paymentMethod.findMany({ select: { currentBalance: true } }),
     prisma.product.findMany({ select: { stockQty: true, costPrice: true } }),
     prisma.customer.findMany({ select: { balance: true, openingBalance: true } }),
@@ -204,6 +204,7 @@ async function computeBalanceSheet() {
     prisma.purchase.aggregate({ _sum: { grandTotal: true }, where: { status: "RECEIVED", isReturn: false } }),
     prisma.purchaseItem.findMany({ where: { purchase: { status: "RECEIVED", isReturn: false } }, select: { qty: true, unitCost: true } }),
     prisma.stockMovement.findMany({ where: { type: { in: ["ADJUSTMENT_IN", "ADJUSTMENT_OUT", "DAMAGE"] } }, select: { qty: true, unitCost: true } }),
+    prisma.employeeAdvance.aggregate({ _sum: { amount: true }, where: { recoveredInId: null } }),
   ]);
 
   const cashBank = r2(accounts.reduce((s, a) => s + num(a.currentBalance), 0));
@@ -212,6 +213,9 @@ async function computeBalanceSheet() {
   const customerAdvances = r2(customers.reduce((s, c) => s + Math.max(-num(c.balance), 0), 0));
   const payables = r2(vendors.reduce((s, v) => s + Math.max(num(v.balance), 0), 0));
   const vendorAdvances = r2(vendors.reduce((s, v) => s + Math.max(-num(v.balance), 0), 0));
+  // Open staff advances are cash out that will be recovered from salary — a receivable
+  // (asset), never an expense. Without this line the sheet is short by the advance value.
+  const employeeAdvances = r2(num(openAdvAgg._sum.amount));
 
   const capitalIn = r2(num(capital.find((c) => c.direction === "CAPITAL_IN")?._sum.amount));
   const drawings = r2(num(capital.find((c) => c.direction === "DRAWING")?._sum.amount));
@@ -245,13 +249,13 @@ async function computeBalanceSheet() {
   const revaluation = r2(stockValue - flowInventoryValue); // manual cost edits + rounding
   const retainedEarnings = r2(salesNetProfit - totalExpenses - purchaseGap + adjustmentValue + revaluation);
 
-  const assetsTotal = r2(cashBank + stockValue + receivables + vendorAdvances);
+  const assetsTotal = r2(cashBank + stockValue + receivables + vendorAdvances + employeeAdvances);
   const liabilitiesTotal = r2(payables + customerAdvances);
   const equityTotal = r2(capitalIn - drawings + retainedEarnings + openingStockValue + openingPartyCapital);
   const imbalance = r2(assetsTotal - (liabilitiesTotal + equityTotal));
 
   return {
-    assets: { cashBank: money(cashBank), stockValue: money(stockValue), receivables: money(receivables), vendorAdvances: money(vendorAdvances), total: money(assetsTotal) },
+    assets: { cashBank: money(cashBank), stockValue: money(stockValue), receivables: money(receivables), vendorAdvances: money(vendorAdvances), employeeAdvances: money(employeeAdvances), total: money(assetsTotal) },
     liabilities: { payables: money(payables), customerAdvances: money(customerAdvances), total: money(liabilitiesTotal) },
     equity: { capital: money(capitalIn), openingStock: money(openingStockValue), openingBalances: money(openingPartyCapital), drawings: money(drawings), retainedEarnings: money(retainedEarnings), total: money(equityTotal) },
     imbalance,
@@ -762,7 +766,7 @@ router.get("/salaries", requirePermission("reports.view"), async (req, res, next
     if (employeeId) where.employeeId = employeeId;
     const pays = await prisma.salaryPayment.findMany({
       where,
-      select: { refNo: true, month: true, date: true, baseAmount: true, bonus: true, deduction: true, netPaid: true, employee: { select: { name: true, code: true } } },
+      select: { refNo: true, month: true, date: true, baseAmount: true, bonus: true, deduction: true, absentDeduction: true, advanceRecovered: true, netPaid: true, employee: { select: { name: true, code: true } } },
       orderBy: { date: "desc" },
     });
     const columns = [
@@ -773,10 +777,13 @@ router.get("/salaries", requirePermission("reports.view"), async (req, res, next
       { header: "Base", key: "baseAmount", align: "right" as const, money: true },
       { header: "Bonus", key: "bonus", align: "right" as const, money: true },
       { header: "Deduction", key: "deduction", align: "right" as const, money: true },
+      { header: "Advance", key: "advanceRecovered", align: "right" as const, money: true },
       { header: "Net paid", key: "netPaid", align: "right" as const, money: true },
     ];
-    const rows = pays.map((p) => ({ refNo: p.refNo, date: p.date.toLocaleDateString("en-GB"), employee: `${p.employee.name} (${p.employee.code})`, month: p.month, baseAmount: num(p.baseAmount), bonus: num(p.bonus), deduction: num(p.deduction), netPaid: num(p.netPaid) }));
-    const totals = { refNo: "Total", baseAmount: r2(rows.reduce((a, r) => a + r.baseAmount, 0)), bonus: r2(rows.reduce((a, r) => a + r.bonus, 0)), deduction: r2(rows.reduce((a, r) => a + r.deduction, 0)), netPaid: r2(rows.reduce((a, r) => a + r.netPaid, 0)) };
+    // "Deduction" column shows the wage-reducing deductions (penalty + absent); advance
+    // recovery is shown separately so base + bonus − deduction − advance = net paid.
+    const rows = pays.map((p) => ({ refNo: p.refNo, date: p.date.toLocaleDateString("en-GB"), employee: `${p.employee.name} (${p.employee.code})`, month: p.month, baseAmount: num(p.baseAmount), bonus: num(p.bonus), deduction: r2(num(p.deduction) + num(p.absentDeduction)), advanceRecovered: num(p.advanceRecovered), netPaid: num(p.netPaid) }));
+    const totals = { refNo: "Total", baseAmount: r2(rows.reduce((a, r) => a + r.baseAmount, 0)), bonus: r2(rows.reduce((a, r) => a + r.bonus, 0)), deduction: r2(rows.reduce((a, r) => a + r.deduction, 0)), advanceRecovered: r2(rows.reduce((a, r) => a + r.advanceRecovered, 0)), netPaid: r2(rows.reduce((a, r) => a + r.netPaid, 0)) };
     const metaFull = month ? [{ label: "Month", value: month }] : meta;
     return sendReport(res, fmtReq(req), "salary-register", { title: "Salary Register", meta: metaFull, columns, rows, totals }, await loadSettings());
   } catch (err) {
@@ -857,6 +864,56 @@ router.get("/open-bookings", requirePermission("reports.view", "sales.view_all")
       outstanding: r2(rows.reduce((a, r) => a + r.outstanding, 0)),
     };
     return sendReport(res, fmtReq(req), "open-bookings", { title: "Open Bookings", meta: [{ label: "As of", value: new Date().toLocaleDateString("en-GB") }], columns, rows, totals }, await loadSettings());
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─────────────────────────── ATTENDANCE SHEET (F5) ───────────────────────────
+
+/** GET /reports/attendance-sheet?month=YYYY-MM[&format] — monthly P/A/H/L per employee. */
+router.get("/attendance-sheet", requirePermission("employees.view", "reports.view"), async (req, res, next) => {
+  try {
+    const month = String(req.query.month ?? "");
+    if (!/^\d{4}-\d{2}$/.test(month)) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: "month must look like 2026-07" } });
+    const [y, m] = month.split("-").map(Number);
+    const from = new Date(Date.UTC(y, m - 1, 1));
+    const to = new Date(Date.UTC(y, m, 0, 23, 59, 59, 999));
+    const [employees, grouped] = await Promise.all([
+      prisma.employee.findMany({ where: { isActive: true }, select: { id: true, code: true, name: true }, orderBy: { name: "asc" } }),
+      prisma.attendance.groupBy({ by: ["employeeId", "status"], where: { date: { gte: from, lte: to } }, _count: { _all: true } }),
+    ]);
+    const map = new Map<string, { present: number; absent: number; half: number; leave: number }>();
+    for (const e of employees) map.set(e.id, { present: 0, absent: 0, half: 0, leave: 0 });
+    for (const g of grouped) {
+      const row = map.get(g.employeeId);
+      if (!row) continue;
+      if (g.status === "PRESENT") row.present = g._count._all;
+      else if (g.status === "ABSENT") row.absent = g._count._all;
+      else if (g.status === "HALF_DAY") row.half = g._count._all;
+      else if (g.status === "LEAVE") row.leave = g._count._all;
+    }
+    const columns = [
+      { header: "Employee", key: "employee" },
+      { header: "Present", key: "present", align: "right" as const },
+      { header: "Absent", key: "absent", align: "right" as const },
+      { header: "Half day", key: "half", align: "right" as const },
+      { header: "Leave", key: "leave", align: "right" as const },
+      { header: "Marked", key: "marked", align: "right" as const },
+    ];
+    const rows = employees.map((e) => {
+      const r = map.get(e.id)!;
+      return { employee: `${e.name} (${e.code})`, present: r.present, absent: r.absent, half: r.half, leave: r.leave, marked: r.present + r.absent + r.half + r.leave };
+    });
+    const totals = {
+      employee: "Total",
+      present: rows.reduce((a, r) => a + r.present, 0),
+      absent: rows.reduce((a, r) => a + r.absent, 0),
+      half: rows.reduce((a, r) => a + r.half, 0),
+      leave: rows.reduce((a, r) => a + r.leave, 0),
+      marked: rows.reduce((a, r) => a + r.marked, 0),
+    };
+    return sendReport(res, fmtReq(req), "attendance-sheet", { title: "Attendance Sheet", meta: [{ label: "Month", value: month }], columns, rows, totals }, await loadSettings());
   } catch (err) {
     next(err);
   }

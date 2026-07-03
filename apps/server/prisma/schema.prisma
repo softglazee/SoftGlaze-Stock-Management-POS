@@ -42,10 +42,11 @@ model User {
   salariesPaid   SalaryPayment[]
   fundTransfers  FundTransfer[]
   capitalEntries CapitalEntry[]
-  cheques        Cheque[]
-  deliveryNotes  DeliveryNote[]
-  bookings       Booking[]
-  leaveApprovals LeaveRequest[]  @relation("LeaveApprover")
+  cheques          Cheque[]
+  deliveryNotes    DeliveryNote[]
+  bookings         Booking[]
+  employeeAdvances EmployeeAdvance[]
+  leaveApprovals   LeaveRequest[]  @relation("LeaveApprover")
 }
 
 // ─────────────────────────── PERMISSIONS (A2) ───────────────────────────
@@ -348,6 +349,7 @@ enum PaymentType {
   EXPENSE            // money out - expense
   REFUND_OUT         // refund to customer
   REFUND_IN          // refund from vendor
+  EMPLOYEE_ADVANCE   // money out - salary advance to staff (a receivable, NOT an expense)
 }
 
 // A money account (G1). Cash drawer, bank accounts, JazzCash/EasyPaisa wallets, card.
@@ -368,6 +370,7 @@ model PaymentMethod {
   transfersOut   FundTransfer[] @relation("TransferFrom")
   transfersIn    FundTransfer[] @relation("TransferTo")
   capitalEntries CapitalEntry[]
+  employeeAdvances EmployeeAdvance[]
 }
 
 // How an account balance moved. Source of truth for PaymentMethod.currentBalance.
@@ -461,6 +464,8 @@ model Payment {
   user       User          @relation(fields: [userId], references: [id])
   notes      String?
   createdAt  DateTime      @default(now())
+
+  employeeAdvance EmployeeAdvance? // set when this money-out is a staff advance (F5)
 
   @@index([date])
   @@index([type])
@@ -725,6 +730,8 @@ model Employee {
 
   salaries      SalaryPayment[]
   leaveRequests LeaveRequest[]
+  attendances   Attendance[]
+  advances      EmployeeAdvance[]
 }
 
 // ─────────────────────────── HR EXTENSIONS (G6, lightweight) ───────────────────────────
@@ -782,24 +789,75 @@ model Holiday {
 // Paying a salary also creates an Expense (category "Salaries") in the same
 // transaction so P&L stays correct automatically.
 model SalaryPayment {
-  id         String   @id @default(cuid())
-  refNo      String   @unique            // SAL-000012
-  employeeId String
-  employee   Employee @relation(fields: [employeeId], references: [id])
-  month      String                       // "2026-06" — the salary period
-  baseAmount Decimal  @db.Decimal(18, 2)
-  bonus      Decimal  @default(0) @db.Decimal(18, 2)
-  deduction  Decimal  @default(0) @db.Decimal(18, 2)   // advances, penalties
-  netPaid    Decimal  @db.Decimal(18, 2)                // base + bonus - deduction
-  date       DateTime @default(now())
-  notes      String?
-  userId     String                        // who paid
-  user       User     @relation(fields: [userId], references: [id])
-  expenseId  String?  @unique              // linked auto-created Expense row
-  createdAt  DateTime @default(now())
+  id              String   @id @default(cuid())
+  refNo           String   @unique            // SAL-000012
+  employeeId      String
+  employee        Employee @relation(fields: [employeeId], references: [id])
+  month           String                       // "2026-06" — the salary period
+  baseAmount      Decimal  @db.Decimal(18, 2)
+  bonus           Decimal  @default(0) @db.Decimal(18, 2)
+  deduction       Decimal  @default(0) @db.Decimal(18, 2)   // other/penalty deduction (reduces the wage expense)
+  absentDeduction Decimal  @default(0) @db.Decimal(18, 2)   // docked for absent/half days (reduces the wage expense)
+  advanceRecovered Decimal @default(0) @db.Decimal(18, 2)   // advances recovered — NOT an expense, only reduces cash paid
+  netPaid         Decimal  @db.Decimal(18, 2)                // base + bonus - deduction - absentDeduction - advanceRecovered (cash out)
+  date            DateTime @default(now())
+  notes           String?
+  userId          String                        // who paid
+  user            User     @relation(fields: [userId], references: [id])
+  expenseId       String?  @unique              // linked auto-created Expense row (amount = earned wage)
+  createdAt       DateTime @default(now())
+
+  advancesRecovered EmployeeAdvance[]           // advances cleared by this salary
 
   @@unique([employeeId, month])            // one salary per employee per month
   @@index([month])
+}
+
+// ─────────────────────── ATTENDANCE & STAFF ADVANCES (F5) ───────────────────────
+// Daily attendance drives the optional per-day salary deduction; advances are cash
+// given mid-month and recovered from salary. Attendance carries no money effect. An
+// advance is a RECEIVABLE (money out now, an asset) — never an expense — that is cleared
+// when a salary recovers it; the balance sheet shows open advances as an asset.
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  HALF_DAY
+  LEAVE
+}
+
+model Attendance {
+  id         String           @id @default(cuid())
+  employeeId String
+  employee   Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  date       DateTime // normalised to midnight — one mark per employee per day
+  status     AttendanceStatus @default(PRESENT)
+  note       String?
+  createdAt  DateTime         @default(now())
+
+  @@unique([employeeId, date])
+  @@index([date])
+}
+
+model EmployeeAdvance {
+  id            String         @id @default(cuid())
+  refNo         String         @unique // ADV-000001
+  employeeId    String
+  employee      Employee       @relation(fields: [employeeId], references: [id])
+  amount        Decimal        @db.Decimal(18, 2)
+  date          DateTime       @default(now())
+  notes         String?
+  methodId      String // account the cash came out of
+  method        PaymentMethod  @relation(fields: [methodId], references: [id])
+  paymentId     String?        @unique // the EMPLOYEE_ADVANCE Payment (reversed if the advance is cancelled)
+  payment       Payment?       @relation(fields: [paymentId], references: [id])
+  recoveredInId String? // the SalaryPayment that recovered this advance (null = still open)
+  recoveredIn   SalaryPayment? @relation(fields: [recoveredInId], references: [id])
+  userId        String
+  user          User           @relation(fields: [userId], references: [id])
+  createdAt     DateTime       @default(now())
+
+  @@index([employeeId])
+  @@index([recoveredInId])
 }
 
 // ─────────────────────────── NOTIFICATIONS & MESSAGING ───────────────────────────
@@ -878,6 +936,6 @@ model AuditLog {
 }
 
 model Counter {
-  key   String @id  // "sale", "purchase", "payment", "customer", "vendor", "expense", "adjustment", "sku", "employee", "salary", "transfer", "capital", "drawing", "cheque", "delivery", "booking"
+  key   String @id  // "sale", "purchase", "payment", "customer", "vendor", "expense", "adjustment", "sku", "employee", "salary", "transfer", "capital", "drawing", "cheque", "delivery", "booking", "advance"
   value Int    @default(0)
 }

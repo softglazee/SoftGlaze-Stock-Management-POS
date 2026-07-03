@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { FileText, Sheet, BarChart3, TrendingUp, Truck, Boxes, Users, Receipt, CreditCard, Activity, IdCard, CalendarClock } from "lucide-react";
+import { FileText, Sheet, BarChart3, TrendingUp, Truck, Boxes, Users, Receipt, CreditCard, Activity, IdCard, CalendarClock, CalendarCheck } from "lucide-react";
 import { api, download, ApiError } from "../lib/api";
 import { ReportTable } from "../lib/types";
 import { fmtMoney } from "../lib/format";
 import { useAuth } from "../context/AuthContext";
 import { PageHeader, TableSkeleton, EmptyState, useToast } from "../components/ui";
 
-type Cfg = { key: string; label: string; path: string; icon: typeof FileText; period?: boolean; basis?: boolean; filters?: boolean; perm?: string };
+type Cfg = { key: string; label: string; path: string; icon: typeof FileText; period?: boolean; basis?: boolean; filters?: boolean; month?: boolean; perm?: string };
 
 const REPORTS: Cfg[] = [
   { key: "profit-loss", label: "Profit & Loss", path: "/reports/profit-loss", icon: TrendingUp, period: true, perm: "reports.profit" },
@@ -19,6 +19,7 @@ const REPORTS: Cfg[] = [
   { key: "payables", label: "Payables Aging", path: "/reports/payables", icon: Truck },
   { key: "expenses", label: "Expenses by Category", path: "/reports/expenses", icon: Receipt, period: true },
   { key: "salaries", label: "Salary Register", path: "/reports/salaries", icon: IdCard, period: true },
+  { key: "attendance-sheet", label: "Attendance Sheet", path: "/reports/attendance-sheet", icon: CalendarCheck, month: true },
   { key: "sales-by-payment-method", label: "Sales by Payment Method", path: "/reports/sales-by-payment-method", icon: CreditCard, period: true },
   { key: "stock-movements", label: "Stock Movements", path: "/reports/stock-movements", icon: Activity, period: true },
   { key: "pending-deliveries", label: "Pending Deliveries", path: "/reports/pending-deliveries", icon: Truck },
@@ -58,6 +59,7 @@ function ReportView({ cfg }: { cfg: Cfg }) {
   const [from, setFrom] = useState(monthAgo);
   const [to, setTo] = useState(today);
   const [basis, setBasis] = useState<"cost" | "sale">("cost");
+  const [month, setMonth] = useState(today.slice(0, 7));
   const [customerId, setCustomerId] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [productId, setProductId] = useState("");
@@ -68,6 +70,7 @@ function ReportView({ cfg }: { cfg: Cfg }) {
 
   const qs = new URLSearchParams({
     ...(cfg.period ? { from, to: `${to}T23:59:59` } : {}),
+    ...(cfg.month ? { month } : {}),
     ...(cfg.basis ? { basis } : {}),
     ...(cfg.filters && customerId ? { customerId } : {}),
     ...(cfg.filters && categoryId ? { categoryId } : {}),
@@ -105,6 +108,9 @@ function ReportView({ cfg }: { cfg: Cfg }) {
             <div><label className="label">From</label><input type="date" className="input !w-40" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
             <div><label className="label">To</label><input type="date" className="input !w-40" value={to} onChange={(e) => setTo(e.target.value)} /></div>
           </>
+        )}
+        {cfg.month && (
+          <div><label className="label">Month</label><input type="month" className="input !w-44" value={month} onChange={(e) => setMonth(e.target.value)} /></div>
         )}
         {cfg.basis && (
           <div>
