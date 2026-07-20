@@ -3,11 +3,17 @@ import cron from "node-cron";
 import app from "./app";
 import { prisma } from "./lib/prisma";
 import { runSweep } from "./lib/notify";
+import { runRecurringExpenses } from "./lib/recurring";
 
 const PORT = Number(process.env.PORT ?? 4000);
 
 app.listen(PORT, () => {
   console.log(`💎 SoftGlaze Stock Manager API running on http://localhost:${PORT}`);
+  // Post any due recurring expenses on boot (safe: deduped by month) so a shop that opens
+  // the app each morning gets its rent/electricity/etc. without waiting for the sweep time.
+  runRecurringExpenses()
+    .then((p) => p.length && console.log(`🔁 Posted ${p.length} recurring expense(s) on boot`))
+    .catch((e) => console.error("Recurring expense post (boot) failed:", e));
 });
 
 /**
@@ -25,6 +31,9 @@ async function scheduleSweep() {
     scheduled?.stop();
     scheduled = cron.schedule(expr, () => {
       runSweep().catch((e) => console.error("Notification sweep failed:", e));
+      runRecurringExpenses()
+        .then((p) => p.length && console.log(`🔁 Posted ${p.length} recurring expense(s)`))
+        .catch((e) => console.error("Recurring expense post failed:", e));
     });
     console.log(`⏰ Daily reminder sweep scheduled at ${row?.value || "09:00"}`);
   } catch (e) {

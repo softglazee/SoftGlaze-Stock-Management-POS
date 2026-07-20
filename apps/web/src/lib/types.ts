@@ -395,6 +395,21 @@ export type Expense = {
   notes: string | null;
   user?: { name: string };
   payment?: { id: string; method?: { name: string } } | null;
+  recurringId?: string | null;
+};
+
+export type RecurringExpense = {
+  id: string;
+  categoryId: string;
+  category?: { id: string; name: string };
+  methodId: string;
+  method?: { id: string; name: string };
+  amount: string;
+  dayOfMonth: number;
+  notes: string | null;
+  isActive: boolean;
+  lastPostedPeriod: string | null;
+  _count?: { generated: number };
 };
 
 // ── Employees & salaries ──

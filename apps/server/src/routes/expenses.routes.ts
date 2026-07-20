@@ -12,6 +12,7 @@ import { requireAuth } from "../middleware/auth";
 import { requirePermission } from "../middleware/permission";
 import { nextNumber } from "../utils/counter";
 import { postPayment } from "../lib/accounts";
+import { runRecurringExpenses } from "../lib/recurring";
 
 const router = Router();
 router.use(requireAuth);
@@ -52,6 +53,106 @@ router.delete("/categories/:id", requirePermission("expenses.edit"), async (req,
     if (cat._count.expenses > 0) return res.status(409).json({ ok: false, error: { code: "CONFLICT", message: `${cat.name} still has ${cat._count.expenses} expenses` } });
     await prisma.expenseCategory.delete({ where: { id: cat.id } });
     res.json({ ok: true, data: { message: `${cat.name} deleted` } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─────────────────────────── RECURRING EXPENSES (A1) ───────────────────────────
+// Rules that a daily/boot sweep turns into real Expenses once a month. Defined before
+// the generic /:id expense routes so "recurring" is never captured as an expense id.
+
+const recurringInclude = {
+  category: { select: { id: true, name: true } },
+  method: { select: { id: true, name: true } },
+  _count: { select: { generated: true } },
+} satisfies Prisma.RecurringExpenseInclude;
+
+const recurringSchema = z.object({
+  categoryId: z.string().min(1, "Pick a category"),
+  methodId: z.string().min(1, "Pick which account pays"),
+  amount: z.coerce.number().positive("Amount must be more than 0"),
+  dayOfMonth: z.coerce.number().int().min(1).max(28).default(1), // cap at 28 → valid every month
+  notes: z.string().trim().max(500).nullable().optional(),
+  isActive: z.boolean().optional(),
+});
+
+/** GET /expenses/recurring — list rules */
+router.get("/recurring", requirePermission("expenses.view"), async (_req, res, next) => {
+  try {
+    const rules = await prisma.recurringExpense.findMany({ include: recurringInclude, orderBy: [{ isActive: "desc" }, { dayOfMonth: "asc" }] });
+    res.json({ ok: true, data: { rules } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** POST /expenses/recurring — create a rule */
+router.post("/recurring", requirePermission("expenses.edit"), async (req, res, next) => {
+  try {
+    const body = recurringSchema.parse(req.body);
+    const [category, method] = await Promise.all([
+      prisma.expenseCategory.findUnique({ where: { id: body.categoryId }, select: { id: true } }),
+      prisma.paymentMethod.findUnique({ where: { id: body.methodId }, select: { id: true } }),
+    ]);
+    if (!category) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: "Unknown category" } });
+    if (!method) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: "Unknown account" } });
+    const created = await prisma.recurringExpense.create({
+      data: { categoryId: body.categoryId, methodId: body.methodId, amount: money(body.amount), dayOfMonth: body.dayOfMonth, notes: body.notes || null, isActive: body.isActive ?? true },
+      include: recurringInclude,
+    });
+    await prisma.auditLog.create({ data: { userId: req.user!.id, action: "CREATE_RECURRING_EXPENSE", entity: "RecurringExpense", entityId: created.id, details: `${created.category.name} · ₨${body.amount} · day ${body.dayOfMonth}` } });
+    res.status(201).json({ ok: true, data: { rule: created } });
+  } catch (err: any) {
+    if (err instanceof z.ZodError) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: err.errors[0].message } });
+    next(err);
+  }
+});
+
+/** PATCH /expenses/recurring/:id — edit rule (amount/day/category/account/notes/active) */
+router.patch("/recurring/:id", requirePermission("expenses.edit"), async (req, res, next) => {
+  try {
+    const body = recurringSchema.partial().parse(req.body);
+    const existing = await prisma.recurringExpense.findUnique({ where: { id: req.params.id } });
+    if (!existing) return res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "Rule not found" } });
+    const updated = await prisma.recurringExpense.update({
+      where: { id: existing.id },
+      data: {
+        categoryId: body.categoryId,
+        methodId: body.methodId,
+        amount: body.amount === undefined ? undefined : money(body.amount),
+        dayOfMonth: body.dayOfMonth,
+        notes: body.notes === undefined ? undefined : body.notes || null,
+        isActive: body.isActive,
+      },
+      include: recurringInclude,
+    });
+    await prisma.auditLog.create({ data: { userId: req.user!.id, action: "UPDATE_RECURRING_EXPENSE", entity: "RecurringExpense", entityId: updated.id, details: updated.category.name } });
+    res.json({ ok: true, data: { rule: updated } });
+  } catch (err: any) {
+    if (err instanceof z.ZodError) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: err.errors[0].message } });
+    next(err);
+  }
+});
+
+/** DELETE /expenses/recurring/:id — removes the rule; already-posted expenses are kept (recurringId → null). */
+router.delete("/recurring/:id", requirePermission("expenses.edit"), async (req, res, next) => {
+  try {
+    const rule = await prisma.recurringExpense.findUnique({ where: { id: req.params.id }, select: { id: true, category: { select: { name: true } } } });
+    if (!rule) return res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "Rule not found" } });
+    await prisma.recurringExpense.delete({ where: { id: rule.id } });
+    await prisma.auditLog.create({ data: { userId: req.user!.id, action: "DELETE_RECURRING_EXPENSE", entity: "RecurringExpense", entityId: rule.id, details: rule.category.name } });
+    res.json({ ok: true, data: { message: "Recurring rule removed" } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** POST /expenses/recurring/run — post everything due right now ("Run due now"). Safe to click any time. */
+router.post("/recurring/run", requirePermission("expenses.create"), async (req, res, next) => {
+  try {
+    const posted = await runRecurringExpenses(req.user!.id);
+    res.json({ ok: true, data: { posted, count: posted.length } });
   } catch (err) {
     next(err);
   }

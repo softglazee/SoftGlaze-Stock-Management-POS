@@ -3,6 +3,20 @@
 > Living hand-off file. Updated after every module or mid-task stop.
 > Read this at the start of every session (see CLAUDE.md → Grounding & session continuity rules).
 
+## New feature batch started — A1 Recurring Expenses DONE ✅ (2026-07-21)
+
+Owner approved a 36-feature batch (`docs/13-FEATURE-BATCH-PLAN.md`, beyond docs/10 F7–F18) and said "start". Building in batch order, verify→commit→push per feature.
+
+**A1 — Recurring expenses (DONE).** Fixed monthly costs (rent/electricity/…) auto-post as REAL Expenses (money out of their account + P&L hit) through the SAME `postPayment` path as a manual expense, so accounting is identical and integrity stays green.
+- Schema: `RecurringExpense` model (categoryId, methodId, amount, dayOfMonth 1–28, notes, isActive, `lastPostedPeriod` "YYYY-MM" dedupe guard) + `Expense.recurringId` (onDelete SetNull) + back-relations. Migration `20260720193103_a1_recurring_expenses`.
+- Server: `lib/recurring.ts` `runRecurringExpenses(actorUserId?)` — posts each active rule once, on/after `dayOfMonth`, deduped by month; own `$transaction` per rule; cron attributes to oldest SUPER_ADMIN. Wired into `index.ts` (on boot + daily sweep). Routes in `expenses.routes.ts`: `GET/POST /expenses/recurring`, `PATCH/DELETE /expenses/recurring/:id`, `POST /expenses/recurring/run` ("Run due now"). Defined before the generic `/:id` routes.
+- Web: `Expenses.tsx` → new **Recurring** header button opening a manager modal (add/edit/pause/delete rules + "Run due now"); auto-posted expense rows show an "Auto" badge. `RecurringExpense` type added.
+- **Verified (throwaway `softglaze_e2e`, dropped; real DB untouched):** 12/12 — day-of-month gate (day-28 rule NOT posted on the 21st), one-click run posts exactly the due rule, dedup (2nd run posts 0), cash account fell by the amount, P&L expense = ₨25,000, integrity all-green + balance sheet ₨0. Both apps `tsc --noEmit` clean. Real dev DB migrated (additive; empty table + nullable column — no integrity impact).
+
+**Next:** A2 — categorised stock-adjustment reasons (breakage/sample/theft/wastage + report).
+
+---
+
 ## F6 price groups COMMITTED + web build-breaker fixed + full E2E re-verified (2026-07-20)
 
 Owner review session ("is it working?"). Two findings + one E2E proof:

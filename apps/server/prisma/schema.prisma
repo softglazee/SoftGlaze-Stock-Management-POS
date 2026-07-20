@@ -403,6 +403,7 @@ model PaymentMethod {
   transfersIn    FundTransfer[] @relation("TransferTo")
   capitalEntries CapitalEntry[]
   employeeAdvances EmployeeAdvance[]
+  recurringExpenses RecurringExpense[]
 }
 
 // How an account balance moved. Source of truth for PaymentMethod.currentBalance.
@@ -666,25 +667,49 @@ model EstimatorItem {
 }
 
 model ExpenseCategory {
-  id       String    @id @default(cuid())
-  name     String    @unique   // Rent, Salaries, Electricity, Transport, Tea/Misc
-  expenses Expense[]
+  id        String             @id @default(cuid())
+  name      String             @unique   // Rent, Salaries, Electricity, Transport, Tea/Misc
+  expenses  Expense[]
+  recurring RecurringExpense[]
 }
 
 model Expense {
-  id         String          @id @default(cuid())
-  refNo      String          @unique          // EXP-000012
-  categoryId String
-  category   ExpenseCategory @relation(fields: [categoryId], references: [id])
-  amount     Decimal         @db.Decimal(18, 2)
-  date       DateTime        @default(now())
-  notes      String?
-  userId     String
-  user       User            @relation(fields: [userId], references: [id])
-  payment    Payment?
-  createdAt  DateTime        @default(now())
+  id          String            @id @default(cuid())
+  refNo       String            @unique          // EXP-000012
+  categoryId  String
+  category    ExpenseCategory   @relation(fields: [categoryId], references: [id])
+  amount      Decimal           @db.Decimal(18, 2)
+  date        DateTime          @default(now())
+  notes       String?
+  userId      String
+  user        User              @relation(fields: [userId], references: [id])
+  payment     Payment?
+  recurringId String?                            // set when auto-posted from a recurring rule
+  recurring   RecurringExpense? @relation(fields: [recurringId], references: [id], onDelete: SetNull)
+  createdAt   DateTime          @default(now())
 
   @@index([date])
+}
+
+// A1 — Recurring expense rule. A daily sweep auto-creates a real Expense (money out +
+// P&L hit, via the same postPayment path) once each month on/after `dayOfMonth`.
+// `lastPostedPeriod` ("YYYY-MM") dedupes so re-running the sweep in a month is safe.
+model RecurringExpense {
+  id               String          @id @default(cuid())
+  categoryId       String
+  category         ExpenseCategory @relation(fields: [categoryId], references: [id])
+  methodId         String
+  method           PaymentMethod   @relation(fields: [methodId], references: [id])
+  amount           Decimal         @db.Decimal(18, 2)
+  dayOfMonth       Int             @default(1)   // 1..28 — day of month to auto-post
+  notes            String?
+  isActive         Boolean         @default(true)
+  lastPostedPeriod String?                        // "YYYY-MM" already posted (dedupe guard)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  generated        Expense[]                      // expenses this rule created
+
+  @@index([isActive])
 }
 
 // ─────────────────────────── STOCK LEDGER ───────────────────────────
