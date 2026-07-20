@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { Plus, Pencil, Trash2, Users, Upload, FileText, HandCoins } from "lucide-react";
 import { api, ApiError } from "../lib/api";
-import { Customer, Paged } from "../lib/types";
+import { Customer, Paged, PriceGroup } from "../lib/types";
 import { num, fmtMoney } from "../lib/format";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -27,8 +27,9 @@ type FormState = {
   taxNumber: string;
   openingBalance: string;
   creditLimit: string;
+  priceGroupId: string;
 };
-const emptyForm: FormState = { name: "", phone: "", address: "", taxNumber: "", openingBalance: "0", creditLimit: "0" };
+const emptyForm: FormState = { name: "", phone: "", address: "", taxNumber: "", openingBalance: "0", creditLimit: "0", priceGroupId: "" };
 
 export default function Customers() {
   const qc = useQueryClient();
@@ -58,6 +59,7 @@ export default function Customers() {
     placeholderData: keepPreviousData,
   });
   const customers = data?.customers ?? [];
+  const { data: priceGroups } = useQuery({ queryKey: ["price-groups"], queryFn: () => api<{ groups: PriceGroup[] }>("/price-groups") });
 
   const save = useMutation({
     mutationFn: (payload: { id?: string; body: Record<string, unknown> }) =>
@@ -98,6 +100,7 @@ export default function Customers() {
       taxNumber: c.taxNumber ?? "",
       openingBalance: String(num(c.openingBalance)),
       creditLimit: String(num(c.creditLimit)),
+      priceGroupId: c.priceGroupId ?? "",
     });
     setError(null);
     setEditing(c);
@@ -114,6 +117,7 @@ export default function Customers() {
         taxNumber: form.taxNumber || null,
         openingBalance: Number(form.openingBalance) || 0,
         creditLimit: Number(form.creditLimit) || 0,
+        priceGroupId: form.priceGroupId || null,
       },
     });
   }
@@ -313,6 +317,13 @@ export default function Customers() {
                 onChange={(e) => setForm({ ...form, creditLimit: e.target.value })}
               />
             </div>
+          </div>
+          <div>
+            <label className="label">Price group <span className="text-muted">(POS uses these rates)</span></label>
+            <select className="input" value={form.priceGroupId} onChange={(e) => setForm({ ...form, priceGroupId: e.target.value })}>
+              <option value="">List price (default)</option>
+              {(priceGroups?.groups ?? []).map((g) => <option key={g.id} value={g.id}>{g.name}{num(g.discountPercent) > 0 ? ` (${num(g.discountPercent)}% off)` : ""}</option>)}
+            </select>
           </div>
           {error && <p className="text-danger text-sm">{error}</p>}
           <div className="flex justify-end gap-2 pt-1">

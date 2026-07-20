@@ -919,4 +919,42 @@ router.get("/attendance-sheet", requirePermission("employees.view", "reports.vie
   }
 });
 
+// ─────────────────────────── MARGINS BY PRICE GROUP (F6) ───────────────────────────
+
+/** GET /reports/margins-by-group?from&to[&format] — revenue, cost & margin per price tier. */
+router.get("/margins-by-group", requirePermission("reports.profit"), async (req, res, next) => {
+  try {
+    const { from, to, meta } = periodOf(req);
+    const sales = await prisma.sale.findMany({
+      where: { status: "COMPLETED", isReturn: false, date: { gte: from, lte: to } },
+      select: { grandTotal: true, totalCost: true, profit: true, customer: { select: { priceGroup: { select: { name: true } } } } },
+    });
+    const map = new Map<string, { revenue: number; cost: number; profit: number }>();
+    for (const s of sales) {
+      const key = s.customer?.priceGroup?.name ?? "List price (no group)";
+      const row = map.get(key) ?? { revenue: 0, cost: 0, profit: 0 };
+      row.revenue = r2(row.revenue + num(s.grandTotal));
+      row.cost = r2(row.cost + num(s.totalCost));
+      row.profit = r2(row.profit + num(s.profit));
+      map.set(key, row);
+    }
+    const rows = [...map.entries()]
+      .map(([group, v]) => ({ group, revenue: v.revenue, cost: v.cost, profit: v.profit, margin: v.revenue > 0 ? r2((v.profit / v.revenue) * 100) : 0 }))
+      .sort((a, b) => b.revenue - a.revenue);
+    const columns = [
+      { header: "Price group", key: "group" },
+      { header: "Revenue", key: "revenue", align: "right" as const, money: true },
+      { header: "Cost (COGS)", key: "cost", align: "right" as const, money: true },
+      { header: "Profit", key: "profit", align: "right" as const, money: true },
+      { header: "Margin %", key: "margin", align: "right" as const },
+    ];
+    const totRev = r2(rows.reduce((a, r) => a + r.revenue, 0));
+    const totProfit = r2(rows.reduce((a, r) => a + r.profit, 0));
+    const totals = { group: "Total", revenue: totRev, cost: r2(rows.reduce((a, r) => a + r.cost, 0)), profit: totProfit, margin: totRev > 0 ? r2((totProfit / totRev) * 100) : 0 };
+    return sendReport(res, fmtReq(req), "margins-by-group", { title: "Margins by Price Group", meta, columns, rows, totals }, await loadSettings());
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;

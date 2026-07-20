@@ -3,6 +3,20 @@
 > Living hand-off file. Updated after every module or mid-task stop.
 > Read this at the start of every session (see CLAUDE.md → Grounding & session continuity rules).
 
+## F6 price groups COMMITTED + web build-breaker fixed + full E2E re-verified (2026-07-20)
+
+Owner review session ("is it working?"). Two findings + one E2E proof:
+
+1. **The entire F6 (customer price groups) module was uncommitted** on `main` — last commit was F5 (`5e70672`). 9 modified + 3 new files (108 insertions) sitting in the working tree: `PriceGroup`/`PriceGroupItem` schema + `Customer.priceGroupId`, `price-groups.routes.ts`, `/reports/margins-by-group` report, `pages/PriceGroups.tsx`, the Customers price-group dropdown, nav + route + types. Migration `20260703172805_f6_price_groups` was already applied to the real DB.
+2. **Build-breaker inside it:** `apps/web/src/pages/Customers.tsx` used the `PriceGroup` type without importing it → `apps/web` `tsc --noEmit` FAILED (`TS2304: Cannot find name 'PriceGroup'`), which breaks `npm run build -w apps/web`. This is why the last "both apps tsc clean" claim was stale — the final tsc was never re-run on the F6 batch. **Fixed** by adding `PriceGroup` to the type import on line 5. Re-ran tsc: **both apps clean.**
+   - Committed the whole F6 module as ONE commit (project convention = one commit per module).
+
+**Full sale→ledger→P&L E2E re-verified on throwaway DB `softglaze_e2e`** (created/migrated[9 migrations]/seeded/dropped; real `softglaze` DB confirmed untouched — probed `needsSetup=true`/0 products before any write). Ran against the **current source via tsx** (not the stale pre-F1 `dist`). Scenario: create Cement (cost ₨700 / sale ₨1000 / opening 100 bags) → sell 10 bags @ ₨1000 to a credit customer, pay ₨4000 cash. **All 15 assertions PASSED:** grandTotal ₨10,000 · paid ₨4,000 · udhaar ₨6,000 · COGS snapshot ₨7,000 · profit ₨3,000 · customer ledger closes at ₨6,000 (== cached balance) · stock 100→90 · P&L revenue ₨10,000 / COGS ₨7,000 / gross ₨3,000 / net ₨3,000 · **integrity all-green 8/8** · balance sheet imbalance ₨0 (opening-stock equity fix confirmed live). Script: scratchpad `e2e.mjs`.
+
+**Not pushed to origin** (owner to confirm push). Next: owner wants a new feature round — 30+ ideas delivered.
+
+---
+
 ## Future roadmap started — F1 Cheque tracking DONE ✅ + 2nd opening-balance accounting bug fixed (2026-07-03)
 
 Owner asked to "complete all features" (docs/10 future roadmap F1–F18), installer deferred. Building them one at a time, verified. **F1 (post-dated cheques) complete**, migration `20260703082504_f1_cheques`.

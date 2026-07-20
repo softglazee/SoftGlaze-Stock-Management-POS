@@ -155,6 +155,7 @@ model Product {
   usedInCombos   ComboItem[] @relation("ComboComponent")  // combos that include this product
   bookingItems   BookingItem[]
   estimatorItems EstimatorItem[]
+  priceOverrides PriceGroupItem[]
 
   @@index([name])
   @@index([categoryId])
@@ -196,6 +197,8 @@ model Customer {
   openingBalance Decimal  @default(0) @db.Decimal(18, 2)
   balance        Decimal  @default(0) @db.Decimal(18, 2) // +ve = customer owes us (receivable)
   creditLimit    Decimal  @default(0) @db.Decimal(18, 2)
+  priceGroupId   String?                    // F6 — Retail/Contractor/Dealer pricing tier
+  priceGroup     PriceGroup? @relation(fields: [priceGroupId], references: [id], onDelete: SetNull)
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
 
@@ -206,6 +209,35 @@ model Customer {
 
   @@index([name])
   @@index([phone])
+  @@index([priceGroupId])
+}
+
+// ─────────────────────────── PRICE GROUPS (F6) ───────────────────────────
+// Customer pricing tiers (Retail / Contractor / Dealer / custom). A group applies a
+// blanket % off the list sale price, plus optional per-product absolute overrides. The
+// POS auto-applies the assigned customer's group price. Pricing only pre-fills the POS —
+// the sale still stores the posted unitPrice snapshot, so past bills never change.
+model PriceGroup {
+  id              String           @id @default(cuid())
+  name            String           @unique // Retail, Contractor, Dealer
+  discountPercent Decimal          @default(0) @db.Decimal(5, 2) // blanket % off list price
+  sortOrder       Int              @default(0)
+  isActive        Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+
+  items     PriceGroupItem[]
+  customers Customer[]
+}
+
+model PriceGroupItem {
+  id           String     @id @default(cuid())
+  priceGroupId String
+  priceGroup   PriceGroup @relation(fields: [priceGroupId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product    @relation(fields: [productId], references: [id])
+  price        Decimal    @db.Decimal(18, 2) // absolute override price for this product in this group
+
+  @@unique([priceGroupId, productId])
 }
 
 model Vendor {

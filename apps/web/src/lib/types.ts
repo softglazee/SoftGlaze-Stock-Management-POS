@@ -84,8 +84,14 @@ export type Customer = {
   openingBalance: string;
   balance: string;
   creditLimit: string;
+  priceGroupId: string | null;
+  priceGroup?: { id: string; name: string; discountPercent: string } | null;
   isActive: boolean;
 };
+
+// ── Price groups (F6) ──
+export type PriceGroupItem = { id: string; productId: string; product?: { id: string; name: string; sku: string; salePrice: string }; price: string };
+export type PriceGroup = { id: string; name: string; discountPercent: string; sortOrder: number; isActive: boolean; items: PriceGroupItem[]; _count?: { customers: number } };
 
 export type Vendor = {
   id: string;

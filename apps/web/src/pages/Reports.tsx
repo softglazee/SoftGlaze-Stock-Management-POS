@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { FileText, Sheet, BarChart3, TrendingUp, Truck, Boxes, Users, Receipt, CreditCard, Activity, IdCard, CalendarClock, CalendarCheck } from "lucide-react";
+import { FileText, Sheet, BarChart3, TrendingUp, Truck, Boxes, Users, Receipt, CreditCard, Activity, IdCard, CalendarClock, CalendarCheck, Tags } from "lucide-react";
 import { api, download, ApiError } from "../lib/api";
 import { ReportTable } from "../lib/types";
 import { fmtMoney } from "../lib/format";
@@ -13,6 +13,7 @@ const REPORTS: Cfg[] = [
   { key: "profit-loss", label: "Profit & Loss", path: "/reports/profit-loss", icon: TrendingUp, period: true, perm: "reports.profit" },
   { key: "sales", label: "Sales Register", path: "/reports/sales", icon: Receipt, period: true, filters: true },
   { key: "top-customers", label: "Top Customers", path: "/reports/top-customers", icon: Users, period: true },
+  { key: "margins-by-group", label: "Margins by Price Group", path: "/reports/margins-by-group", icon: Tags, period: true, perm: "reports.profit" },
   { key: "purchases", label: "Purchase Register", path: "/reports/purchases", icon: Truck, period: true },
   { key: "stock-valuation", label: "Stock Valuation", path: "/reports/stock-valuation", icon: Boxes, basis: true },
   { key: "receivables", label: "Receivables Aging", path: "/reports/receivables", icon: Users },

@@ -21,8 +21,11 @@ const customerSchema = z.object({
   taxNumber: z.string().trim().max(30).nullable().optional(), // CNIC / NTN
   openingBalance: money.default(0), // +ve = customer owes us from before
   creditLimit: money.min(0, "Credit limit cannot be negative").default(0),
+  priceGroupId: z.string().nullable().optional(), // F6 pricing tier
   isActive: z.boolean().optional(),
 });
+
+const customerInclude = { priceGroup: { select: { id: true, name: true, discountPercent: true } } } satisfies Prisma.CustomerInclude;
 
 /** GET /customers?page&limit&search&status=active|inactive */
 router.get("/", async (req, res, next) => {
@@ -44,7 +47,7 @@ router.get("/", async (req, res, next) => {
     if (status === "inactive") where.isActive = false;
 
     const [customers, total, totals] = await Promise.all([
-      prisma.customer.findMany({ where, orderBy: { name: "asc" }, skip: (page - 1) * limit, take: limit }),
+      prisma.customer.findMany({ where, include: customerInclude, orderBy: { name: "asc" }, skip: (page - 1) * limit, take: limit }),
       prisma.customer.count({ where }),
       prisma.customer.aggregate({ _sum: { balance: true }, where: { isActive: true } }),
     ]);
@@ -61,7 +64,7 @@ router.get("/", async (req, res, next) => {
 /** GET /customers/:id */
 router.get("/:id", async (req, res, next) => {
   try {
-    const customer = await prisma.customer.findUnique({ where: { id: req.params.id } });
+    const customer = await prisma.customer.findUnique({ where: { id: req.params.id }, include: customerInclude });
     if (!customer) {
       return res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "Customer not found" } });
     }
@@ -87,6 +90,7 @@ router.post("/", requireRole(...WRITE_ROLES), async (req, res, next) => {
           openingBalance: body.openingBalance,
           balance: body.openingBalance,
           creditLimit: body.creditLimit,
+          priceGroupId: body.priceGroupId || null,
         },
       });
       await tx.auditLog.create({
@@ -94,7 +98,8 @@ router.post("/", requireRole(...WRITE_ROLES), async (req, res, next) => {
       });
       return created;
     });
-    res.status(201).json({ ok: true, data: { customer } });
+    const full = await prisma.customer.findUnique({ where: { id: customer.id }, include: customerInclude });
+    res.status(201).json({ ok: true, data: { customer: full } });
   } catch (err: any) {
     if (err instanceof z.ZodError) {
       return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: err.errors[0].message } });
@@ -127,6 +132,7 @@ router.patch("/:id", requireRole(...WRITE_ROLES), async (req, res, next) => {
           openingBalance: body.openingBalance,
           balance: balanceDelta !== 0 ? { increment: balanceDelta } : undefined,
           creditLimit: body.creditLimit,
+          priceGroupId: body.priceGroupId === undefined ? undefined : body.priceGroupId || null,
           isActive: body.isActive,
         },
       });
@@ -135,7 +141,8 @@ router.patch("/:id", requireRole(...WRITE_ROLES), async (req, res, next) => {
       });
       return updated;
     });
-    res.json({ ok: true, data: { customer } });
+    const full = await prisma.customer.findUnique({ where: { id: customer.id }, include: customerInclude });
+    res.json({ ok: true, data: { customer: full } });
   } catch (err: any) {
     if (err instanceof z.ZodError) {
       return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: err.errors[0].message } });

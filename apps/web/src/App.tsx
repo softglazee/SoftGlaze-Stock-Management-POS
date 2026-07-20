@@ -16,6 +16,7 @@ import POS from "./pages/POS";
 import Sales from "./pages/Sales";
 import Customers from "./pages/Customers";
 import Vendors from "./pages/Vendors";
+import PriceGroups from "./pages/PriceGroups";
 import Accounts from "./pages/Accounts";
 import Payments from "./pages/Payments";
 import Cheques from "./pages/Cheques";
@@ -81,6 +82,7 @@ export default function App() {
         <Route path="/purchases" element={<Purchases />} />
         <Route path="/stock" element={<Stock />} />
         <Route path="/customers" element={<Customers />} />
+        <Route path="/price-groups" element={<PriceGroups />} />
         <Route path="/vendors" element={<Vendors />} />
         <Route path="/accounts" element={<Accounts />} />
         <Route path="/payments" element={<Payments />} />
