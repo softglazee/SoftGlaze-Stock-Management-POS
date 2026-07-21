@@ -742,15 +742,30 @@ model StockMovement {
   @@index([productId, date])
 }
 
+// A2 — structured reason for a stock adjustment (for the shrinkage/write-off report).
+enum AdjustmentReason {
+  COUNT_CORRECTION // physical count fix (neutral)
+  BREAKAGE         // broken / damaged
+  THEFT            // stolen / shrinkage
+  SAMPLE           // given as sample / giveaway
+  WASTAGE          // spoiled / cutting waste
+  EXPIRY           // expired
+  FOUND            // found extra stock (neutral, inward)
+  OTHER
+}
+
 model StockAdjustment {
-  id        String                @id @default(cuid())
-  refNo     String                @unique      // ADJ-000005
-  reason    String                              // Damage, Count correction, Theft...
-  date      DateTime              @default(now())
-  userId    String
-  user      User                  @relation(fields: [userId], references: [id])
-  items     StockAdjustmentItem[]
-  createdAt DateTime              @default(now())
+  id         String                @id @default(cuid())
+  refNo      String                @unique      // ADJ-000005
+  reasonCode AdjustmentReason      @default(COUNT_CORRECTION) // A2 categorised reason
+  reason     String                              // free-text detail (label when blank)
+  date       DateTime              @default(now())
+  userId     String
+  user       User                  @relation(fields: [userId], references: [id])
+  items      StockAdjustmentItem[]
+  createdAt  DateTime              @default(now())
+
+  @@index([reasonCode])
 }
 
 model StockAdjustmentItem {

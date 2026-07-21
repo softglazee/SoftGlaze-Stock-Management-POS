@@ -210,6 +210,7 @@ export type StockAdjustmentItem = {
 export type StockAdjustment = {
   id: string;
   refNo: string;
+  reasonCode: string;
   reason: string;
   date: string;
   user?: { name: string };

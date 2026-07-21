@@ -957,4 +957,67 @@ router.get("/margins-by-group", requirePermission("reports.profit"), async (req,
   }
 });
 
+// ─────────────────────── STOCK ADJUSTMENTS BY REASON (A2) ───────────────────────
+
+const ADJ_REASON_LABEL: Record<string, string> = {
+  COUNT_CORRECTION: "Count correction",
+  BREAKAGE: "Breakage / damaged",
+  THEFT: "Theft / shrinkage",
+  SAMPLE: "Sample / giveaway",
+  WASTAGE: "Wastage",
+  EXPIRY: "Expired",
+  FOUND: "Found extra",
+  OTHER: "Other",
+};
+
+/**
+ * GET /reports/adjustments-by-reason?from&to[&format] — shrinkage & write-off report.
+ * Groups adjustment stock movements by their categorised reason, showing qty in/out and
+ * the COST VALUE that left stock (breakage/theft/wastage/etc.) at the movement's snapshot.
+ */
+router.get("/adjustments-by-reason", requirePermission("stock.adjust"), async (req, res, next) => {
+  try {
+    const { from, to, meta } = periodOf(req);
+    const adjustments = await prisma.stockAdjustment.findMany({ where: { date: { gte: from, lte: to } }, select: { id: true, reasonCode: true } });
+    const reasonByAdj = new Map(adjustments.map((a) => [a.id, a.reasonCode as string]));
+    const moves = adjustments.length
+      ? await prisma.stockMovement.findMany({ where: { refType: "ADJUSTMENT", refId: { in: adjustments.map((a) => a.id) } }, select: { refId: true, qty: true, unitCost: true } })
+      : [];
+
+    const map = new Map<string, { qtyIn: number; qtyOut: number; valueOut: number }>();
+    for (const m of moves) {
+      const reason = reasonByAdj.get(m.refId ?? "") ?? "OTHER";
+      const row = map.get(reason) ?? { qtyIn: 0, qtyOut: 0, valueOut: 0 };
+      const q = num(m.qty);
+      if (q >= 0) row.qtyIn = r2(row.qtyIn + q);
+      else {
+        row.qtyOut = r2(row.qtyOut + -q);
+        row.valueOut = r2(row.valueOut + -q * num(m.unitCost));
+      }
+      map.set(reason, row);
+    }
+
+    const rows = [...map.entries()]
+      .map(([code, v]) => ({ reason: ADJ_REASON_LABEL[code] ?? code, in: v.qtyIn, out: v.qtyOut, net: r2(v.qtyIn - v.qtyOut), valueOut: v.valueOut }))
+      .sort((a, b) => b.valueOut - a.valueOut);
+    const columns = [
+      { header: "Reason", key: "reason" },
+      { header: "In (qty)", key: "in", align: "right" as const },
+      { header: "Out (qty)", key: "out", align: "right" as const },
+      { header: "Net (qty)", key: "net", align: "right" as const },
+      { header: "Loss value", key: "valueOut", align: "right" as const, money: true },
+    ];
+    const totals = {
+      reason: "Total",
+      in: r2(rows.reduce((a, r) => a + r.in, 0)),
+      out: r2(rows.reduce((a, r) => a + r.out, 0)),
+      net: r2(rows.reduce((a, r) => a + r.net, 0)),
+      valueOut: r2(rows.reduce((a, r) => a + r.valueOut, 0)),
+    };
+    return sendReport(res, fmtReq(req), "adjustments-by-reason", { title: "Stock Adjustments by Reason", meta, columns, rows, totals }, await loadSettings());
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;

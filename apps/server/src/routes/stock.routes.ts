@@ -42,8 +42,23 @@ router.get("/movements", requirePermission("products.view"), async (req, res, ne
   }
 });
 
+// A2 — structured adjustment reasons. LOSS reasons type outward moves as DAMAGE.
+const REASON_CODES = ["COUNT_CORRECTION", "BREAKAGE", "THEFT", "SAMPLE", "WASTAGE", "EXPIRY", "FOUND", "OTHER"] as const;
+export const REASON_LABEL: Record<(typeof REASON_CODES)[number], string> = {
+  COUNT_CORRECTION: "Count correction",
+  BREAKAGE: "Breakage / damaged",
+  THEFT: "Theft / shrinkage",
+  SAMPLE: "Sample / giveaway",
+  WASTAGE: "Wastage",
+  EXPIRY: "Expired",
+  FOUND: "Found extra",
+  OTHER: "Other",
+};
+const LOSS_REASONS = new Set(["BREAKAGE", "THEFT", "WASTAGE", "EXPIRY"]); // outward → DAMAGE movement
+
 const adjustSchema = z.object({
-  reason: z.string().trim().min(1, "Give a reason").max(120),
+  reasonCode: z.enum(REASON_CODES).default("COUNT_CORRECTION"),
+  reason: z.string().trim().max(120).nullable().optional(), // optional free-text detail
   notes: z.string().trim().max(1000).nullable().optional(),
   items: z
     .array(
@@ -51,7 +66,7 @@ const adjustSchema = z.object({
         productId: z.string().min(1),
         qtyChange: z.coerce.number().refine((n) => n !== 0, "Change cannot be zero"),
         unitCost: z.coerce.number().min(0).nullable().optional(),
-        damage: z.boolean().optional(), // treat an outward change as DAMAGE instead of ADJUSTMENT_OUT
+        damage: z.boolean().optional(), // force DAMAGE type even for a neutral reason
       })
     )
     .min(1, "Add at least one product"),
@@ -93,13 +108,16 @@ router.post("/adjustments", requirePermission("stock.adjust"), async (req, res, 
       if (p.type !== "STANDARD") return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: `${p.name} does not track stock` } });
     }
 
+    const reasonText = (body.reason && body.reason.trim()) || REASON_LABEL[body.reasonCode];
+    const isLoss = LOSS_REASONS.has(body.reasonCode);
+
     const adjustment = await prisma.$transaction(async (tx) => {
       const refNo = await nextNumber(tx, "adjustment", "ADJ");
-      const adj = await tx.stockAdjustment.create({ data: { refNo, reason: body.reason, userId: req.user!.id } });
+      const adj = await tx.stockAdjustment.create({ data: { refNo, reasonCode: body.reasonCode, reason: reasonText, userId: req.user!.id } });
       for (const it of body.items) {
         const p = byId.get(it.productId)!;
         await tx.stockAdjustmentItem.create({ data: { adjustmentId: adj.id, productId: it.productId, qtyChange: new Prisma.Decimal(it.qtyChange) } });
-        const type = it.qtyChange > 0 ? "ADJUSTMENT_IN" : it.damage ? "DAMAGE" : "ADJUSTMENT_OUT";
+        const type = it.qtyChange > 0 ? "ADJUSTMENT_IN" : isLoss || it.damage ? "DAMAGE" : "ADJUSTMENT_OUT";
         await applyMovement(tx, {
           productId: it.productId,
           type,
@@ -107,11 +125,11 @@ router.post("/adjustments", requirePermission("stock.adjust"), async (req, res, 
           unitCost: it.unitCost ?? p.costPrice,
           refType: "ADJUSTMENT",
           refId: adj.id,
-          notes: `${refNo}: ${body.reason}`,
+          notes: `${refNo}: ${reasonText}`,
           productName: p.name,
         });
       }
-      await tx.auditLog.create({ data: { userId: req.user!.id, action: "STOCK_ADJUSTMENT", entity: "StockAdjustment", entityId: adj.id, details: `${refNo}: ${body.reason}` } });
+      await tx.auditLog.create({ data: { userId: req.user!.id, action: "STOCK_ADJUSTMENT", entity: "StockAdjustment", entityId: adj.id, details: `${refNo}: ${reasonText}` } });
       return adj;
     });
 

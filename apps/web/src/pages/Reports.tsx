@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { FileText, Sheet, BarChart3, TrendingUp, Truck, Boxes, Users, Receipt, CreditCard, Activity, IdCard, CalendarClock, CalendarCheck, Tags } from "lucide-react";
+import { FileText, Sheet, BarChart3, TrendingUp, Truck, Boxes, Users, Receipt, CreditCard, Activity, IdCard, CalendarClock, CalendarCheck, Tags, PackageMinus } from "lucide-react";
 import { api, download, ApiError } from "../lib/api";
 import { ReportTable } from "../lib/types";
 import { fmtMoney } from "../lib/format";
@@ -23,6 +23,7 @@ const REPORTS: Cfg[] = [
   { key: "attendance-sheet", label: "Attendance Sheet", path: "/reports/attendance-sheet", icon: CalendarCheck, month: true },
   { key: "sales-by-payment-method", label: "Sales by Payment Method", path: "/reports/sales-by-payment-method", icon: CreditCard, period: true },
   { key: "stock-movements", label: "Stock Movements", path: "/reports/stock-movements", icon: Activity, period: true },
+  { key: "adjustments-by-reason", label: "Adjustments by Reason", path: "/reports/adjustments-by-reason", icon: PackageMinus, period: true, perm: "stock.adjust" },
   { key: "pending-deliveries", label: "Pending Deliveries", path: "/reports/pending-deliveries", icon: Truck },
   { key: "open-bookings", label: "Open Bookings", path: "/reports/open-bookings", icon: CalendarClock },
 ];

@@ -13,7 +13,11 @@ Owner approved a 36-feature batch (`docs/13-FEATURE-BATCH-PLAN.md`, beyond docs/
 - Web: `Expenses.tsx` → new **Recurring** header button opening a manager modal (add/edit/pause/delete rules + "Run due now"); auto-posted expense rows show an "Auto" badge. `RecurringExpense` type added.
 - **Verified (throwaway `softglaze_e2e`, dropped; real DB untouched):** 12/12 — day-of-month gate (day-28 rule NOT posted on the 21st), one-click run posts exactly the due rule, dedup (2nd run posts 0), cash account fell by the amount, P&L expense = ₨25,000, integrity all-green + balance sheet ₨0. Both apps `tsc --noEmit` clean. Real dev DB migrated (additive; empty table + nullable column — no integrity impact).
 
-**Next:** A2 — categorised stock-adjustment reasons (breakage/sample/theft/wastage + report).
+**A2 — Categorised stock-adjustment reasons (DONE).** Adjustments now carry a structured `reasonCode` (`AdjustmentReason` enum: COUNT_CORRECTION/BREAKAGE/THEFT/SAMPLE/WASTAGE/EXPIRY/FOUND/OTHER) alongside the free-text `reason` (now an optional detail). Loss reasons (BREAKAGE/THEFT/WASTAGE/EXPIRY) type outward moves as DAMAGE; the per-line "damage" checkbox is gone (reason drives it). New **Adjustments by Reason** report (`GET /reports/adjustments-by-reason`) — shrinkage/write-off: qty in/out + loss value at the movement's snapshot cost, grouped by reason (PDF/Excel). Migration `20260720232459_a2_adjustment_reasons`. Web: Stock New-Adjustment form reason dropdown + optional detail; Reports nav entry (PackageMinus, gated `stock.adjust`); `StockAdjustment.reasonCode` type.
+- **Accounting checked:** stock write-offs already balance — `computeBalanceSheet` recognises `adjustmentValue = Σ(ADJUSTMENT_IN/OUT/DAMAGE qty×unitCost)` in retained earnings, so a breakage loss reduces equity and Assets=Liab+Equity holds. A2's ADJUSTMENT_OUT→DAMAGE retype stays inside that same set → no balance-sheet change.
+- **Verified (throwaway DB, dropped):** 11/11 — breakage loss ₨3,500, sample ₨1,400, total loss ₨4,900, stock nets 100→96, integrity all-green + **balance sheet ₨0**. Both apps tsc clean.
+
+**Next:** A3 — comparative reports (MoM / YoY columns on existing reports; no schema change).
 
 ---
 

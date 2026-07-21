@@ -126,7 +126,19 @@ function Ledger() {
 }
 
 /* ─────────────── Adjustments ─────────────── */
-type AdjLine = { productId: string; name: string; sku: string; unitShort: string; qtyChange: string; damage: boolean };
+type AdjLine = { productId: string; name: string; sku: string; unitShort: string; qtyChange: string };
+
+// A2 — categorised reasons (must match the server enum). Loss reasons are written off at cost.
+const ADJ_REASONS: { code: string; label: string }[] = [
+  { code: "COUNT_CORRECTION", label: "Count correction" },
+  { code: "BREAKAGE", label: "Breakage / damaged" },
+  { code: "THEFT", label: "Theft / shrinkage" },
+  { code: "SAMPLE", label: "Sample / giveaway" },
+  { code: "WASTAGE", label: "Wastage" },
+  { code: "EXPIRY", label: "Expired" },
+  { code: "FOUND", label: "Found extra" },
+  { code: "OTHER", label: "Other" },
+];
 
 function Adjustments() {
   const qc = useQueryClient();
@@ -190,7 +202,8 @@ function Adjustments() {
 
 function NewAdjustment({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const { toast } = useToast();
-  const [reason, setReason] = useState("");
+  const [reasonCode, setReasonCode] = useState("COUNT_CORRECTION");
+  const [detail, setDetail] = useState("");
   const [lines, setLines] = useState<AdjLine[]>([]);
   const [prodSearch, setProdSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -204,14 +217,14 @@ function NewAdjustment({ onClose, onSaved }: { onClose: () => void; onSaved: () 
   function addLine(p: Product) {
     if (p.type !== "STANDARD") { toast(`${p.name} does not track stock`, "error"); return; }
     if (lines.some((l) => l.productId === p.id)) { setProdSearch(""); return; }
-    setLines([...lines, { productId: p.id, name: p.name, sku: p.sku, unitShort: p.unit?.shortName ?? "", qtyChange: "-1", damage: false }]);
+    setLines([...lines, { productId: p.id, name: p.name, sku: p.sku, unitShort: p.unit?.shortName ?? "", qtyChange: "-1" }]);
     setProdSearch("");
   }
 
   const save = useMutation({
     mutationFn: () => api<{ adjustment: StockAdjustment }>("/stock/adjustments", {
       method: "POST",
-      body: { reason, items: lines.map((l) => ({ productId: l.productId, qtyChange: Number(l.qtyChange) || 0, damage: l.damage })) },
+      body: { reasonCode, reason: detail.trim() || null, items: lines.map((l) => ({ productId: l.productId, qtyChange: Number(l.qtyChange) || 0 })) },
     }),
     onSuccess: (d) => { toast(`Adjustment ${d.adjustment.refNo} saved`); onSaved(); },
     onError: (e: ApiError) => setError(e.message),
@@ -220,7 +233,6 @@ function NewAdjustment({ onClose, onSaved }: { onClose: () => void; onSaved: () 
   function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!reason.trim()) return setError("Give a reason.");
     if (lines.length === 0) return setError("Add at least one product.");
     if (lines.some((l) => (Number(l.qtyChange) || 0) === 0)) return setError("Each line needs a non-zero change.");
     save.mutate();
@@ -229,9 +241,17 @@ function NewAdjustment({ onClose, onSaved }: { onClose: () => void; onSaved: () 
   return (
     <Modal open onClose={onClose} title="New stock adjustment" wide>
       <form onSubmit={submit} className="space-y-4">
-        <div>
-          <label className="label">Reason</label>
-          <input className="input" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Count correction / Damaged / Theft / Expired" required autoFocus />
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="label">Reason</label>
+            <select className="input" value={reasonCode} onChange={(e) => setReasonCode(e.target.value)} autoFocus>
+              {ADJ_REASONS.map((r) => <option key={r.code} value={r.code}>{r.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="label">Detail <span className="text-muted">(optional)</span></label>
+            <input className="input" value={detail} onChange={(e) => setDetail(e.target.value)} placeholder="e.g. rain-damaged in yard" />
+          </div>
         </div>
         <div>
           <label className="label">Products</label>
@@ -256,7 +276,6 @@ function NewAdjustment({ onClose, onSaved }: { onClose: () => void; onSaved: () 
                 <div key={l.productId} className="flex items-center gap-2">
                   <span className="flex-1 text-sm">{l.name} <span className="mono text-muted text-xs">{l.sku}</span></span>
                   <input className="input mono !w-28 !py-1 text-right" type="number" step="any" value={l.qtyChange} onChange={(e) => setLines(lines.map((x, idx) => idx === i ? { ...x, qtyChange: e.target.value } : x))} aria-label={`Change for ${l.name}`} />
-                  <label className="flex items-center gap-1 text-xs text-muted"><input type="checkbox" checked={l.damage} onChange={(e) => setLines(lines.map((x, idx) => idx === i ? { ...x, damage: e.target.checked } : x))} /> damage</label>
                   <button type="button" className="text-muted hover:text-danger" onClick={() => setLines(lines.filter((_, idx) => idx !== i))}><X size={15} /></button>
                 </div>
               ))}
