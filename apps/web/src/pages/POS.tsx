@@ -50,17 +50,21 @@ export default function POS() {
 
   const subTotal = cart.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.unitPrice) || 0) - (Number(l.discount) || 0), 0);
   const grand = Math.max(0, subTotal - (Number(billDiscount) || 0) + (Number(tax) || 0) + (Number(otherCharges) || 0));
+  // A5 round-off: round the payable to the nearest N (setting) — server recomputes the same way.
+  const roundTo = Number(settings?.settings.round_off_to || 0);
+  const payable = roundTo > 0 ? Math.round(grand / roundTo) * roundTo : grand;
+  const roundOff = Math.round((payable - grand) * 100) / 100;
   const paidSum = payments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
-  const due = Math.max(0, grand - paidSum);
-  const change = Math.max(0, paidSum - grand);
+  const due = Math.max(0, payable - paidSum);
+  const change = Math.max(0, paidSum - payable);
 
   // One default cash row that tracks the grand total until the cashier edits payments
   useEffect(() => {
     if (!cashMethodId) return;
-    if (payments.length === 0) { setPayments([{ methodId: cashMethodId, amount: grand ? grand.toFixed(2) : "" }]); return; }
-    if (!payTouched && payments.length === 1) setPayments([{ methodId: payments[0].methodId, amount: grand ? grand.toFixed(2) : "" }]);
+    if (payments.length === 0) { setPayments([{ methodId: cashMethodId, amount: payable ? payable.toFixed(2) : "" }]); return; }
+    if (!payTouched && payments.length === 1) setPayments([{ methodId: payments[0].methodId, amount: payable ? payable.toFixed(2) : "" }]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [grand, cashMethodId]);
+  }, [payable, cashMethodId]);
 
   function addProduct(p: Product) {
     setProdSearch("");
@@ -82,8 +86,8 @@ export default function POS() {
   async function submit(status: "COMPLETED" | "DRAFT" | "QUOTATION", overrideCredit = false) {
     if (cart.length === 0) { setError("Cart is empty."); return; }
     setBusy(true); setError(null);
-    // applied payments capped to grand (extra cash is change, not applied)
-    let remaining = grand;
+    // applied payments capped to the rounded payable (extra cash is change, not applied)
+    let remaining = payable;
     const applied = status === "COMPLETED"
       ? payments.filter((p) => (Number(p.amount) || 0) > 0 && p.methodId).map((p) => {
           const amt = Math.min(Number(p.amount) || 0, remaining); remaining = Math.round((remaining - amt) * 100) / 100; return { methodId: p.methodId, amount: amt };
@@ -225,8 +229,13 @@ export default function POS() {
               <label className="text-muted">Tax<input className="input mono !py-1 text-right mt-0.5" type="number" step="0.01" min="0" value={tax} onChange={(e) => setTax(e.target.value)} /></label>
               <label className="text-muted">Delivery<input className="input mono !py-1 text-right mt-0.5" type="number" step="0.01" min="0" value={otherCharges} onChange={(e) => setOtherCharges(e.target.value)} /></label>
             </div>
+            {roundOff !== 0 && (
+              <div className="flex items-center justify-between text-sm text-muted">
+                <span>Round off</span><span className="money">{roundOff > 0 ? "+" : ""}{fmtMoney(roundOff)}</span>
+              </div>
+            )}
             <div className="flex items-center justify-between text-lg font-bold">
-              <span>Grand total</span><span className="money text-accent">{fmtMoney(grand)}</span>
+              <span>Grand total</span><span className="money text-accent">{fmtMoney(payable)}</span>
             </div>
 
             {/* Payments */}

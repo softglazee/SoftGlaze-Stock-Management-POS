@@ -62,7 +62,7 @@ function ProfileTab() {
   const s = { ...data?.settings, ...form };
 
   const save = useMutation({
-    mutationFn: () => { const body: Record<string, string> = {}; FIELDS.flat().forEach((f) => { body[f.key] = form[f.key] ?? ""; }); body.receipt_size = form.receipt_size ?? s.receipt_size ?? "80mm"; return api("/settings", { method: "PATCH", body }); },
+    mutationFn: () => { const body: Record<string, string> = {}; FIELDS.flat().forEach((f) => { body[f.key] = form[f.key] ?? ""; }); body.receipt_size = form.receipt_size ?? s.receipt_size ?? "80mm"; body.round_off_to = form.round_off_to ?? s.round_off_to ?? "0"; return api("/settings", { method: "PATCH", body }); },
     onSuccess: () => { toast("Shop profile saved"); qc.invalidateQueries({ queryKey: ["settings"] }); },
     onError: (e: ApiError) => toast(e.message, "error"),
   });
@@ -97,6 +97,7 @@ function ProfileTab() {
         ))}
         <div className="grid grid-cols-2 gap-3">
           <div><label className="label">Default receipt size</label><select className="input" value={s.receipt_size ?? "80mm"} onChange={(e) => set("receipt_size", e.target.value)}><option value="80mm">80mm thermal</option><option value="a4">A4</option></select></div>
+          <div><label className="label">Round off total to</label><select className="input" value={s.round_off_to ?? "0"} onChange={(e) => set("round_off_to", e.target.value)}><option value="0">No rounding</option><option value="1">Nearest ₨1</option><option value="5">Nearest ₨5</option><option value="10">Nearest ₨10</option></select></div>
         </div>
         <div className="flex justify-end"><button className="btn btn-secondary !border-accent !text-accent" onClick={() => save.mutate()} disabled={save.isPending}>{save.isPending ? "Saving…" : "Save profile"}</button></div>
       </div>

@@ -83,11 +83,11 @@ router.get("/integrity", requirePermission("reports.view"), async (_req, res, ne
     checks.push({ name: "Account balances match the money ledger", ok: acctBad === 0, detail: acctBad === 0 ? `${accounts.length} accounts verified` : `${acctBad} mismatched — e.g. ${acctFirst}` });
 
     // 3a. Sale math (return docs settle via balance/refund, so paid+due stays 0 for them)
-    const sales = await prisma.sale.findMany({ where: { status: { in: ["COMPLETED", "RETURNED"] } }, select: { invoiceNo: true, isReturn: true, subTotal: true, discount: true, tax: true, otherCharges: true, grandTotal: true, paidAmount: true, dueAmount: true } });
+    const sales = await prisma.sale.findMany({ where: { status: { in: ["COMPLETED", "RETURNED"] } }, select: { invoiceNo: true, isReturn: true, subTotal: true, discount: true, tax: true, otherCharges: true, roundOff: true, grandTotal: true, paidAmount: true, dueAmount: true } });
     let saleBad = 0;
     let saleFirst = "";
     for (const s of sales) {
-      const gt = r2(num(s.subTotal) - num(s.discount) + num(s.tax) + num(s.otherCharges));
+      const gt = r2(num(s.subTotal) - num(s.discount) + num(s.tax) + num(s.otherCharges) + num(s.roundOff));
       const pd = r2(num(s.paidAmount) + num(s.dueAmount));
       const badTotal = gt !== r2(num(s.grandTotal));
       const badPaid = !s.isReturn && pd !== r2(num(s.grandTotal));

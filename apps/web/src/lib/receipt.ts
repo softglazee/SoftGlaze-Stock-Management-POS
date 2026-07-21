@@ -77,6 +77,7 @@ export function printReceipt(sale: Sale, size: "80mm" | "a4", settings: Record<s
       ${Number(sale.discount) ? `<tr><td>Discount</td><td class="r">- ${money(sale.discount)}</td></tr>` : ""}
       ${Number(sale.tax) ? `<tr><td>Tax</td><td class="r">${money(sale.tax)}</td></tr>` : ""}
       ${Number(sale.otherCharges) ? `<tr><td>Delivery / other</td><td class="r">${money(sale.otherCharges)}</td></tr>` : ""}
+      ${Number(sale.roundOff) ? `<tr><td>Round off</td><td class="r">${Number(sale.roundOff) > 0 ? "" : "- "}${money(Math.abs(Number(sale.roundOff)))}</td></tr>` : ""}
       <tr class="grand"><td>Grand total</td><td class="r">${money(sale.grandTotal)}</td></tr>
       <tr><td>Paid</td><td class="r">${money(sale.paidAmount)}</td></tr>
       ${Number(sale.dueAmount) ? `<tr><td>Balance (udhaar)</td><td class="r">${money(sale.dueAmount)}</td></tr>` : ""}

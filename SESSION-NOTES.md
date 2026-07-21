@@ -24,7 +24,14 @@ Owner approved a 36-feature batch (`docs/13-FEATURE-BATCH-PLAN.md`, beyond docs/
 
 **Batch A: A1–A4 done, A5 (round-off) remains. Commits: F6 3bbc607 · A1 ce1511c · A2 ddc6595 · A3 04f20ac · A4 next.**
 
-**Next:** A5 — round-off setting (round POS grand total to nearest ₨5/10; difference posts to a Round-off account, integrity-safe).
+**A5 — Round-off (DONE). ✅ Batch A complete.** Round the POS grand total to the nearest ₨1/5/10 (Settings → Shop Profile "Round off total to"; setting `round_off_to`, default "0"=off). Design decision: instead of a separate round-off account, the difference is stored as `Sale.roundOff` and **folds into grandTotal**, so it naturally flows into revenue/profit and the books stay balanced. The sacred integrity invariant was updated: `grandTotal == subTotal − discount + tax + otherCharges + roundOff` (reports.routes sale-total check now selects+adds roundOff). Server (`sales.routes`) reads the setting, rounds `rawTotal`→`grandTotal`, stores `roundOff` on both completed + draft/quotation sales. POS recomputes the same rounding client-side (reads `round_off_to` from GET /settings) → shows a "Round off" line + rounded **payable**, and default cash / due / change all use payable. Receipt prints the round-off line. `Sale.roundOff` schema field + web Sale type. Migration `20260721…_a5_sale_roundoff` (additive; real DB migrated, integrity still ₨0). Seeded `round_off_to:"0"` + added to EDITABLE_KEYS; ensured the key exists on the real DB (INSERT ON CONFLICT).
+- **Verified (throwaway DB, round_off_to=10, dropped):** 13/13 — round up 2997→3000 (+3), round down 2002→2000 (−2), profit incl. round-off, P&L revenue 5000, sale-totals integrity check passes, **all-green + balance sheet ₨0**. Both apps tsc clean.
+
+**Also this session (owner testing):** sidebar regrouped into sections (Sell/Inventory/People/Money/Insights/Admin) — commit `f48bb38`. Loaded 15 realistic building-materials products with opening stock into the **real DB** via the API (cement/sariya/bricks/pipes/sand/paint/hardware/sanitary) so the owner can test POS+print; real DB integrity still all-green ₨0. Set a **temporary password** on `admin@softglaze.com` → `softglaze123` (owner to change in-app) so they could log in; dev servers (`npm run dev`) left running on :4000 (API) + :5173 (web).
+
+**Batch A commits: F6 3bbc607 · A1 ce1511c · A2 ddc6595 · A3 04f20ac · A4 509b5d2 · menu f48bb38 · A5 next.**
+
+**Next:** B1 — cash denomination counter, then B2 day-close / shift Z-report.
 
 ---
 

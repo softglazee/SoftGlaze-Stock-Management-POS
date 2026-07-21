@@ -38,6 +38,7 @@ const EDITABLE_KEYS = [
   "invoice_footer_urdu",
   "show_logo",
   "receipt_size",
+  "round_off_to",
   // Regional
   "currency",
   "currency_symbol",

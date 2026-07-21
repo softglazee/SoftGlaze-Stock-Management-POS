@@ -84,6 +84,7 @@ async function main() {
     invoice_prefix: "INV",
     invoice_footer: "Thank you for your business! Goods once sold on credit must be settled within agreed time.",
     receipt_size: "80mm",
+    round_off_to: "0",                  // A5 — 0 off, or 1/5/10 (round POS grand total to nearest)
     // Notifications & reminders
     low_stock_sweep_time: "09:00",
     debt_reminder_days: "30",

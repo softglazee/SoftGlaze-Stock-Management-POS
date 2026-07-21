@@ -178,8 +178,14 @@ router.post("/", requirePermission("sales.create"), async (req, res, next) => {
       totalCost = round2(totalCost + l.qty * unitCost);
       return { line: l, product: p, total, unitCost };
     });
-    const grandTotal = round2(subTotal - body.discount + body.tax + body.otherCharges);
-    if (grandTotal < 0) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: "Discount is larger than the total" } });
+    const rawTotal = round2(subTotal - body.discount + body.tax + body.otherCharges);
+    if (rawTotal < 0) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: "Discount is larger than the total" } });
+    // A5 — round the payable to the nearest N (shop setting); the difference is stored on
+    // the sale as roundOff and folds into grandTotal, so the books stay balanced.
+    const roundToRow = await prisma.setting.findUnique({ where: { key: "round_off_to" }, select: { value: true } });
+    const roundTo = Math.max(0, Number(roundToRow?.value || 0));
+    const grandTotal = roundTo > 0 ? round2(Math.round(rawTotal / roundTo) * roundTo) : rawTotal;
+    const roundOff = round2(grandTotal - rawTotal);
     const profit = round2(grandTotal - totalCost);
 
     // ── Hold / quotation: snapshots only, no stock/money movement ──
@@ -189,7 +195,7 @@ router.post("/", requirePermission("sales.create"), async (req, res, next) => {
         const created = await tx.sale.create({
           data: {
             invoiceNo, customerId: customer?.id ?? null, userId: req.user!.id, status: body.status, ...(body.date ? { date: body.date } : {}),
-            subTotal: money(subTotal), discount: money(body.discount), tax: money(body.tax), otherCharges: money(body.otherCharges),
+            subTotal: money(subTotal), discount: money(body.discount), tax: money(body.tax), otherCharges: money(body.otherCharges), roundOff: money(roundOff),
             grandTotal: money(grandTotal), paidAmount: money(0), dueAmount: money(0), totalCost: money(totalCost), profit: money(profit), notes: body.notes || null,
           },
         });
@@ -234,7 +240,7 @@ router.post("/", requirePermission("sales.create"), async (req, res, next) => {
       const created = await tx.sale.create({
         data: {
           invoiceNo, customerId: customer?.id ?? null, userId: req.user!.id, status: "COMPLETED", ...(body.date ? { date: body.date } : {}),
-          subTotal: money(subTotal), discount: money(body.discount), tax: money(body.tax), otherCharges: money(body.otherCharges),
+          subTotal: money(subTotal), discount: money(body.discount), tax: money(body.tax), otherCharges: money(body.otherCharges), roundOff: money(roundOff),
           grandTotal: money(grandTotal), paidAmount: money(paidAmount), dueAmount: money(dueAmount), totalCost: money(totalCost), profit: money(profit), notes: body.notes || null,
         },
       });

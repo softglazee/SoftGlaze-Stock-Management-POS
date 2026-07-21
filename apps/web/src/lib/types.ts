@@ -167,6 +167,7 @@ export type Sale = {
   discount: string;
   tax: string;
   otherCharges: string;
+  roundOff?: string;
   grandTotal: string;
   paidAmount: string;
   dueAmount: string;

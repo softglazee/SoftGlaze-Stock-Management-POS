@@ -335,6 +335,7 @@ model Sale {
   discount    Decimal    @default(0) @db.Decimal(18, 2)   // bill-level discount
   tax         Decimal    @default(0) @db.Decimal(18, 2)
   otherCharges Decimal   @default(0) @db.Decimal(18, 2)   // delivery/loading
+  roundOff    Decimal    @default(0) @db.Decimal(18, 2)   // A5 — nearest-N rounding adjustment (in grandTotal)
   grandTotal  Decimal    @default(0) @db.Decimal(18, 2)
   paidAmount  Decimal    @default(0) @db.Decimal(18, 2)
   dueAmount   Decimal    @default(0) @db.Decimal(18, 2)   // credit (udhaar)
