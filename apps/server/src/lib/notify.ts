@@ -83,5 +83,11 @@ export async function runSweep(): Promise<{ lowStock: number; debt: number; paya
     await createNotification({ type: "CHEQUE_DUE", title: c.direction === "RECEIVED" ? "Cheque to deposit" : "Cheque will be presented", message: `Cheque ${c.chequeNo} (${party}) for ₨${c.amount} is due — mark it cleared or bounced`, entity: "Cheque", entityId: c.id });
   }
 
+  // Promise-to-pay dates that have arrived and are still OPEN (A4)
+  const duePromises = await prisma.paymentPromise.findMany({ where: { status: "OPEN", promiseDate: { lte: today } }, select: { id: true, amount: true, promiseDate: true, customer: { select: { name: true } } } });
+  for (const pr of duePromises) {
+    await createNotification({ type: "PROMISE_DUE", title: "Promise to pay due", message: `${pr.customer.name} promised ₨${pr.amount} by ${pr.promiseDate.toLocaleDateString("en-GB")} — follow up`, entity: "PaymentPromise", entityId: pr.id });
+  }
+
   return { lowStock, debt, payable };
 }

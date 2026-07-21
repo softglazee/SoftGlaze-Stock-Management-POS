@@ -6,7 +6,7 @@ import { api, ApiError } from "../lib/api";
 import { AppNotification } from "../lib/types";
 import { PageHeader, EmptyState, TableSkeleton, useToast } from "../components/ui";
 
-const ICON: Record<string, typeof Info> = { LOW_STOCK: PackageX, DEBT_REMINDER: Users, PAYABLE_REMINDER: Truck, CREDIT_LIMIT: Info, SYSTEM: Info };
+const ICON: Record<string, typeof Info> = { LOW_STOCK: PackageX, DEBT_REMINDER: Users, PAYABLE_REMINDER: Truck, CREDIT_LIMIT: Info, PROMISE_DUE: Users, SYSTEM: Info };
 
 export default function Notifications() {
   const qc = useQueryClient();

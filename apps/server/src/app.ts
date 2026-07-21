@@ -26,6 +26,7 @@ import deliveryRoutes from "./routes/deliveries.routes";
 import bookingRoutes from "./routes/bookings.routes";
 import estimatorRoutes from "./routes/estimator.routes";
 import ledgerRoutes from "./routes/ledger.routes";
+import promiseRoutes from "./routes/promises.routes";
 import expenseRoutes from "./routes/expenses.routes";
 import employeeRoutes from "./routes/employees.routes";
 import attendanceRoutes from "./routes/attendance.routes";
@@ -82,6 +83,7 @@ app.use("/api/v1/deliveries", deliveryRoutes);   // F2 (delivery challans)
 app.use("/api/v1/bookings", bookingRoutes);      // F3 (advance bookings with rate lock)
 app.use("/api/v1/estimator", estimatorRoutes);   // F4 (construction material estimator)
 app.use("/api/v1/ledger", ledgerRoutes);         // Phase 4 (customer & vendor statements)
+app.use("/api/v1/promises", promiseRoutes);      // A4 (promise-to-pay collections tracking)
 app.use("/api/v1/expenses", expenseRoutes);      // Phase 4
 app.use("/api/v1/employees", employeeRoutes);    // Phase 4 (employees & salaries)
 app.use("/api/v1/attendance", attendanceRoutes); // F5 (attendance)

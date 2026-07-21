@@ -207,6 +207,19 @@ export type StockAdjustmentItem = {
   product?: { name: string; sku: string; unit?: { shortName: string } };
   qtyChange: string;
 };
+// A4 — promise-to-pay
+export type PaymentPromise = {
+  id: string;
+  customerId: string;
+  customer?: { id: string; code: string; name: string; phone: string | null; balance: string };
+  amount: string;
+  promiseDate: string;
+  note: string | null;
+  status: "OPEN" | "KEPT" | "BROKEN" | "CANCELLED";
+  user?: { name: string };
+};
+export type PromiseSummary = { open: number; overdue: number; openAmount: string | number };
+
 export type StockAdjustment = {
   id: string;
   refNo: string;

@@ -19,7 +19,12 @@ Owner approved a 36-feature batch (`docs/13-FEATURE-BATCH-PLAN.md`, beyond docs/
 
 **A3 — Comparative reports (MoM / YoY) (DONE).** New `GET /reports/comparison?from&to` — this period vs the immediately-preceding equal-length window vs the same dates last year, with % change, for Net sales / COGS / Gross profit / Expenses / Net profit (net profit is the totals row). No schema change: a shared `plMetrics(from,to)` helper reuses the accrual P&L math; the "vs prev / vs LY" columns are plain-string % cells ("+12.5%" / "—" / "new") which the exporter renders fine in table/PDF/Excel. Web: one registry line in `Reports.tsx` (BarChart3, gated `reports.profit`) — the generic ReportView renders it. **Verified (throwaway DB, dropped):** 10/10 — backdated sales into each window gave current ₨10,000 / prev ₨5,000 (+100%) / last-year ₨8,000 (+25%), net-profit row 3,000/1,500/2,400, integrity green. Both apps tsc clean.
 
-**Next:** A4 — promise-to-pay tracking (log a promised payment date on a customer's receivable + a follow-up alert).
+**A4 — Promise-to-pay tracking (DONE).** Soft collections record: a customer promised ₨X by a date. NO money moves (their udhaar already lives on the ledger); this only tracks the commitment + outcome. `PaymentPromise` model (customer, amount, promiseDate, note, status OPEN/KEPT/BROKEN/CANCELLED, userId) + `PromiseStatus` enum + `NotificationType.PROMISE_DUE`. Routes `promises.routes.ts` (`GET /promises` [+`?status=overdue`], `/summary`, POST, PATCH status/edit, DELETE) mounted `/api/v1/promises`; gated `customers.view` (read) / `payments.receive` (write). Daily sweep (`lib/notify.runSweep`) raises a PROMISE_DUE bell for OPEN promises past their date (deduped by promise id); resolving/deleting marks the bell read. Web: new **Promises** page (summary cards, status filters, log-promise modal with customer search, Kept/Broken/Cancel/Delete row actions) + nav (HandCoins) + route + `PaymentPromise`/`PromiseSummary` types + PROMISE_DUE icon in bell/notifications. Migration `20260720…_a4_payment_promises`.
+- **Verified (throwaway DB, dropped):** 12/12 — 2 promises, summary open 2 / overdue 1 / ₨8,000, overdue filter, `POST /notifications/sweep` raised exactly 1 PROMISE_DUE at the overdue promise, mark-KEPT dropped summary + cleared the bell (0 unread), integrity all-green. Both apps tsc clean.
+
+**Batch A: A1–A4 done, A5 (round-off) remains. Commits: F6 3bbc607 · A1 ce1511c · A2 ddc6595 · A3 04f20ac · A4 next.**
+
+**Next:** A5 — round-off setting (round POS grand total to nearest ₨5/10; difference posts to a Round-off account, integrity-safe).
 
 ---
 

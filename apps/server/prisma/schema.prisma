@@ -47,6 +47,7 @@ model User {
   bookings         Booking[]
   employeeAdvances EmployeeAdvance[]
   leaveApprovals   LeaveRequest[]  @relation("LeaveApprover")
+  paymentPromises  PaymentPromise[]
 }
 
 // ─────────────────────────── PERMISSIONS (A2) ───────────────────────────
@@ -206,6 +207,7 @@ model Customer {
   payments Payment[]
   cheques  Cheque[]
   bookings Booking[]
+  promises PaymentPromise[]
 
   @@index([name])
   @@index([phone])
@@ -940,6 +942,7 @@ enum NotificationType {
   PAYABLE_REMINDER // vendor payment due
   CREDIT_LIMIT     // customer crossed credit limit
   CHEQUE_DUE       // a pending cheque is due to clear on/before today
+  PROMISE_DUE      // a customer's promise-to-pay date has arrived, still unpaid (A4)
   SYSTEM           // backups, errors, announcements
 }
 
@@ -956,6 +959,32 @@ model Notification {
   createdAt DateTime         @default(now())
 
   @@index([isRead, createdAt])
+}
+
+// A4 — Promise-to-pay. A soft collections record: a customer said they'll pay ₨X by a
+// date. No money moves (the receivable already lives on their ledger); this only tracks
+// the commitment and raises a PROMISE_DUE bell when the date passes and it's still OPEN.
+enum PromiseStatus {
+  OPEN
+  KEPT
+  BROKEN
+  CANCELLED
+}
+
+model PaymentPromise {
+  id          String        @id @default(cuid())
+  customerId  String
+  customer    Customer      @relation(fields: [customerId], references: [id])
+  amount      Decimal       @db.Decimal(18, 2)
+  promiseDate DateTime                                     // when they said they'll pay
+  note        String?
+  status      PromiseStatus @default(OPEN)
+  userId      String
+  user        User          @relation(fields: [userId], references: [id])
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([status, promiseDate])
 }
 
 enum MessageChannel {

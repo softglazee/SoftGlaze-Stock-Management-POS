@@ -5,7 +5,7 @@ import { Bell, PackageX, Users, Truck, Info, CheckCheck } from "lucide-react";
 import { api } from "../lib/api";
 import { AppNotification } from "../lib/types";
 
-const ICON: Record<string, typeof Bell> = { LOW_STOCK: PackageX, DEBT_REMINDER: Users, PAYABLE_REMINDER: Truck, CREDIT_LIMIT: Info, SYSTEM: Info };
+const ICON: Record<string, typeof Bell> = { LOW_STOCK: PackageX, DEBT_REMINDER: Users, PAYABLE_REMINDER: Truck, CREDIT_LIMIT: Info, PROMISE_DUE: Users, SYSTEM: Info };
 
 function timeAgo(iso: string) {
   const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
