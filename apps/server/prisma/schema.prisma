@@ -231,6 +231,9 @@ model Customer {
   creditLimit    Decimal  @default(0) @db.Decimal(18, 2)
   priceGroupId   String?                    // F6 — Retail/Contractor/Dealer pricing tier
   priceGroup     PriceGroup? @relation(fields: [priceGroupId], references: [id], onDelete: SetNull)
+  reminderTier   Int      @default(0)       // E4 — highest udhaar-reminder tier already sent (0 = none)
+  lastReminderAt DateTime?                  // E4 — when the last reminder went out (cooldown guard)
+  email          String?                    // E1 — for auto-emailed statements
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
 
@@ -1288,6 +1291,7 @@ model DayClose {
 enum MessageChannel {
   WHATSAPP
   EMAIL
+  SMS // E2 — local SMS gateway
 }
 
 enum MessageStatus {

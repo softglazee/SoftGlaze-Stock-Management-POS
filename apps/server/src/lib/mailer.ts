@@ -20,7 +20,7 @@ export async function smtpConfig() {
   };
 }
 
-export async function sendMail(opts: { to: string; subject: string; html?: string; text?: string }) {
+export async function sendMail(opts: { to: string; subject: string; html?: string; text?: string; attachments?: { filename: string; content: Buffer }[] }) {
   const cfg = await smtpConfig();
   if (!cfg.host) throw Object.assign(new Error("SMTP is not configured yet — set it in Settings → Integrations"), { status: 400, code: "VALIDATION" });
   const transport = nodemailer.createTransport({
@@ -30,5 +30,9 @@ export async function sendMail(opts: { to: string; subject: string; html?: strin
     ...(cfg.user ? { auth: { user: cfg.user, pass: cfg.pass } } : {}),
   });
   const from = cfg.fromEmail ? `"${cfg.fromName}" <${cfg.fromEmail}>` : cfg.fromName;
-  return transport.sendMail({ from, to: opts.to, subject: opts.subject, html: opts.html, text: opts.text });
+  return transport.sendMail({ from, to: opts.to, subject: opts.subject, html: opts.html, text: opts.text, attachments: opts.attachments });
+}
+
+export async function smtpConfigured(): Promise<boolean> {
+  return !!(await smtpConfig()).host;
 }

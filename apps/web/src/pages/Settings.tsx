@@ -255,6 +255,17 @@ function IntegrationsTab() {
         </div>
       </div>
 
+      <div className="card p-5 space-y-3 lg:col-span-2">
+        <h3 className="font-semibold display flex items-center gap-2"><Send size={16} /> SMS gateway (local provider)</h3>
+        <p className="text-xs text-muted">Wire any HTTP SMS provider (e.g. a Pakistani gateway). Put a URL template with <span className="mono">{"{key} {sender} {to} {text}"}</span> placeholders — reminders and bulk messages will use it. Leave blank to keep SMS off.</p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="sm:col-span-2"><label className="label">API URL template</label><input className="input mono text-xs" value={s.sms_api_url ?? ""} onChange={(e) => set("sms_api_url", e.target.value)} placeholder="https://api.provider.pk/send?apikey={key}&to={to}&from={sender}&text={text}" /></div>
+          <div><label className="label">API key</label><input className="input" value={s.sms_api_key ?? ""} onChange={(e) => set("sms_api_key", e.target.value)} /></div>
+          <div><label className="label">Sender / mask</label><input className="input" value={s.sms_sender ?? ""} onChange={(e) => set("sms_sender", e.target.value)} placeholder="SoftGlaze" /></div>
+          <div><label className="label">Method</label><select className="input" value={s.sms_method ?? "GET"} onChange={(e) => set("sms_method", e.target.value)}><option value="GET">GET</option><option value="POST">POST (JSON)</option></select></div>
+        </div>
+      </div>
+
       <div className="lg:col-span-2 flex justify-end"><button className="btn btn-secondary !border-accent !text-accent" onClick={() => save.mutate()} disabled={save.isPending}>{save.isPending ? "Saving…" : "Save integrations"}</button></div>
     </div>
   );

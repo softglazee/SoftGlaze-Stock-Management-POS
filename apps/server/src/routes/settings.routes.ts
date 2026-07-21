@@ -51,6 +51,10 @@ const EDITABLE_KEYS = [
   // Reminders
   "low_stock_sweep_time",
   "debt_reminder_days",
+  // E4 — tiered udhaar reminder escalation
+  "reminder_t1_days", "reminder_t2_days", "reminder_t3_days",
+  "reminder_t1_text", "reminder_t2_text", "reminder_t3_text",
+  "reminder_cooldown_days",
 ] as const;
 
 /**
@@ -75,6 +79,8 @@ const PUBLIC_KEYS = [
 const INTEGRATION_KEYS = [
   "smtp_host", "smtp_port", "smtp_secure", "smtp_user", "smtp_pass", "smtp_from_name",
   "whatsapp_mode", "whatsapp_number", "sms_enabled",
+  // E2 — local SMS gateway (🔌 owner fills these)
+  "sms_api_url", "sms_api_key", "sms_sender", "sms_method",
   // G8 message templates (WhatsApp text with {placeholders})
   "tmpl_wa_receipt", "tmpl_wa_reminder", "tmpl_wa_purchase", "tmpl_wa_statement", "tmpl_wa_quotation",
   // G8 email templates (subject + body, same {placeholders})

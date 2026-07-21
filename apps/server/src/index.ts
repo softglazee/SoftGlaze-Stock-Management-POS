@@ -4,6 +4,8 @@ import app from "./app";
 import { prisma } from "./lib/prisma";
 import { runSweep } from "./lib/notify";
 import { runRecurringExpenses } from "./lib/recurring";
+import { runUdhaarEscalation } from "./lib/reminders";
+import { runMonthlyStatementsIfDue } from "./lib/statements";
 
 const PORT = Number(process.env.PORT ?? 4000);
 
@@ -34,6 +36,14 @@ async function scheduleSweep() {
       runRecurringExpenses()
         .then((p) => p.length && console.log(`🔁 Posted ${p.length} recurring expense(s)`))
         .catch((e) => console.error("Recurring expense post failed:", e));
+      // E4 — udhaar reminder escalation (self-deduping via tier + cooldown)
+      runUdhaarEscalation()
+        .then((r) => r.sent && console.log(`📣 Sent ${r.sent} udhaar reminder(s)`))
+        .catch((e) => console.error("Reminder escalation failed:", e));
+      // E1 — monthly customer statements (runs once per month)
+      runMonthlyStatementsIfDue()
+        .then((r) => r?.sent && console.log(`📧 Emailed ${r.sent} monthly statement(s)`))
+        .catch((e) => console.error("Monthly statements failed:", e));
     });
     console.log(`⏰ Daily reminder sweep scheduled at ${row?.value || "09:00"}`);
   } catch (e) {

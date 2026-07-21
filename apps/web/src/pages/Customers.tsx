@@ -24,13 +24,14 @@ import { PaymentModal } from "./Payments";
 type FormState = {
   name: string;
   phone: string;
+  email: string;
   address: string;
   taxNumber: string;
   openingBalance: string;
   creditLimit: string;
   priceGroupId: string;
 };
-const emptyForm: FormState = { name: "", phone: "", address: "", taxNumber: "", openingBalance: "0", creditLimit: "0", priceGroupId: "" };
+const emptyForm: FormState = { name: "", phone: "", email: "", address: "", taxNumber: "", openingBalance: "0", creditLimit: "0", priceGroupId: "" };
 
 export default function Customers() {
   const qc = useQueryClient();
@@ -98,6 +99,7 @@ export default function Customers() {
     setForm({
       name: c.name,
       phone: c.phone ?? "",
+      email: c.email ?? "",
       address: c.address ?? "",
       taxNumber: c.taxNumber ?? "",
       openingBalance: String(num(c.openingBalance)),
@@ -115,6 +117,7 @@ export default function Customers() {
       body: {
         name: form.name,
         phone: form.phone || null,
+        email: form.email || null,
         address: form.address || null,
         taxNumber: form.taxNumber || null,
         openingBalance: Number(form.openingBalance) || 0,
@@ -289,6 +292,16 @@ export default function Customers() {
                 className="input mono"
                 value={form.taxNumber}
                 onChange={(e) => setForm({ ...form, taxNumber: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="label">Email (for statements)</label>
+              <input
+                className="input"
+                type="email"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                placeholder="name@example.com"
               />
             </div>
           </div>

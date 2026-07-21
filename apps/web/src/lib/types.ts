@@ -101,6 +101,7 @@ export type Customer = {
   code: string;
   name: string;
   phone: string | null;
+  email: string | null;
   address: string | null;
   taxNumber: string | null;
   openingBalance: string;
@@ -108,8 +109,12 @@ export type Customer = {
   creditLimit: string;
   priceGroupId: string | null;
   priceGroup?: { id: string; name: string; discountPercent: string } | null;
+  reminderTier?: number;
   isActive: boolean;
 };
+
+// ── Outreach (Batch E) ──
+export type ReminderPlan = { customerId: string; name: string; balance: number; ageDays: number; tier: number; already: number; willSend: boolean; reason: string };
 
 // ── Customer sites / site-wise sub-ledgers (C4) ──
 export type CustomerSite = { id: string; customerId: string; name: string; address: string | null; isActive: boolean; createdAt?: string };

@@ -43,6 +43,7 @@ import reportRoutes from "./routes/reports.routes";
 import userRoutes from "./routes/users.routes";
 import notificationRoutes from "./routes/notifications.routes";
 import messageRoutes from "./routes/messages.routes";
+import outreachRoutes from "./routes/outreach.routes";
 import auditRoutes from "./routes/audit.routes";
 import backupRoutes from "./routes/backup.routes";
 
@@ -108,6 +109,7 @@ app.use("/api/v1/reports", reportRoutes);        // Phase 4 slice + Phase 5 repo
 app.use("/api/v1/users", userRoutes);            // Phase 6 (users & roles)
 app.use("/api/v1/notifications", notificationRoutes); // Phase 6 (bell + reminders)
 app.use("/api/v1/messages", messageRoutes);      // Phase 6 (WhatsApp/email log)
+app.use("/api/v1/outreach", outreachRoutes);     // Batch E (statements, campaigns, reminders)
 app.use("/api/v1/audit", auditRoutes);           // Phase 6 (audit log viewer)
 app.use("/api/v1/backup", backupRoutes);         // Phase 6 (backup / restore)
 

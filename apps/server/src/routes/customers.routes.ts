@@ -17,6 +17,7 @@ const money = z.coerce.number();
 const customerSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(120),
   phone: z.string().trim().max(25).nullable().optional(),
+  email: z.string().trim().email("Enter a valid email").max(120).or(z.literal("")).nullable().optional(), // E1 — for emailed statements
   address: z.string().trim().max(300).nullable().optional(),
   taxNumber: z.string().trim().max(30).nullable().optional(), // CNIC / NTN
   openingBalance: money.default(0), // +ve = customer owes us from before
@@ -85,6 +86,7 @@ router.post("/", requireRole(...WRITE_ROLES), async (req, res, next) => {
           code,
           name: body.name,
           phone: body.phone || null,
+          email: body.email || null,
           address: body.address || null,
           taxNumber: body.taxNumber || null,
           openingBalance: body.openingBalance,
@@ -127,6 +129,7 @@ router.patch("/:id", requireRole(...WRITE_ROLES), async (req, res, next) => {
         data: {
           name: body.name,
           phone: body.phone === undefined ? undefined : body.phone || null,
+          email: body.email === undefined ? undefined : body.email || null,
           address: body.address === undefined ? undefined : body.address || null,
           taxNumber: body.taxNumber === undefined ? undefined : body.taxNumber || null,
           openingBalance: body.openingBalance,
