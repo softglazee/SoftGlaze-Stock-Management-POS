@@ -160,7 +160,15 @@ export default function POS() {
       discount: Number(billDiscount) || 0, tax: Number(tax) || 0, otherCharges: Number(otherCharges) || 0,
       notes: notes || null, status, payments: applied, overrideCredit, overrideDiscount,
       redeemPoints: customer && Number(redeemPoints) > 0 ? Math.floor(Number(redeemPoints)) : 0,
+      clientRef: crypto.randomUUID?.() ?? `off-${Date.now()}-${Math.round(Math.random() * 1e6)}`,
     };
+    // H7 — offline mode: if there's no connection, queue a COMPLETED sale locally and sync later.
+    if (status === "COMPLETED" && typeof navigator !== "undefined" && navigator.onLine === false) {
+      const queue = JSON.parse(localStorage.getItem("pos-offline-queue") || "[]");
+      queue.push(body); localStorage.setItem("pos-offline-queue", JSON.stringify(queue));
+      toast("Saved offline — it will sync when the connection returns");
+      setBusy(false); resetSale(); return;
+    }
     try {
       const { sale } = await api<{ sale: Sale }>("/sales", { method: "POST", body });
       if (status === "COMPLETED") { setSuccess(sale); }
@@ -196,6 +204,24 @@ export default function POS() {
   }, [busy, cart, success, customer, payments, billDiscount, tax, otherCharges, notes]);
 
   useEffect(() => { searchRef.current?.focus(); }, []);
+
+  // H7 — flush any offline-queued sales on load + whenever the connection returns.
+  // The server dedupes by clientRef, so re-sending a synced sale is harmless.
+  useEffect(() => {
+    async function flush() {
+      const queue = JSON.parse(localStorage.getItem("pos-offline-queue") || "[]");
+      if (!queue.length) return;
+      const remaining: unknown[] = [];
+      for (const b of queue) { try { await api("/sales", { method: "POST", body: b }); } catch { remaining.push(b); } }
+      localStorage.setItem("pos-offline-queue", JSON.stringify(remaining));
+      const synced = queue.length - remaining.length;
+      if (synced > 0) { toast(`Synced ${synced} offline sale${synced > 1 ? "s" : ""}`); qc.invalidateQueries({ queryKey: ["pos-all-products"] }); }
+    }
+    flush();
+    window.addEventListener("online", flush);
+    return () => window.removeEventListener("online", flush);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // G5 — mirror the live cart to a customer-facing 2nd screen (open /pos/display in another window).
   useEffect(() => {

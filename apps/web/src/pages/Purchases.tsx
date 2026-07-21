@@ -120,6 +120,8 @@ function NewPurchase({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
   const [tax, setTax] = useState("0");
   const [otherCharges, setOtherCharges] = useState("0");
   const [landedBasis, setLandedBasis] = useState<LandedBasis>("VALUE"); // C2 — default: capitalise freight by line value
+  const [currency, setCurrency] = useState("PKR"); // H4 — import-purchase FX
+  const [fxRate, setFxRate] = useState("1");
   const [methodId, setMethodId] = useState("");
   const [paidAmount, setPaidAmount] = useState("0");
   const [notes, setNotes] = useState("");
@@ -181,6 +183,8 @@ function NewPurchase({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
         tax: Number(tax) || 0,
         otherCharges: Number(otherCharges) || 0,
         landedBasis,
+        currency: currency || "PKR",
+        fxRate: Number(fxRate) || 1,
         notes: notes || null,
         payments: paid > 0 && methodId ? [{ methodId, amount: paid }] : [],
       };
@@ -286,6 +290,18 @@ function NewPurchase({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
               <span className="text-sm text-muted">Bill discount</span>
               <input className="input mono !w-32 !py-1 text-right" type="number" step="0.01" min="0" value={discount} onChange={(e) => setDiscount(e.target.value)} />
             </div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm text-muted" title="Enter costs in this currency; they convert to PKR at the rate below">Currency</span>
+              <select className="input !w-32 !py-1 text-sm" value={currency} onChange={(e) => setCurrency(e.target.value)}>
+                {["PKR", "USD", "AED", "SAR", "CNY", "EUR", "GBP"].map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            {currency !== "PKR" && (
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm text-muted">1 {currency} = ₨</span>
+                <input className="input mono !w-32 !py-1 text-right" type="number" step="0.0001" min="0" value={fxRate} onChange={(e) => setFxRate(e.target.value)} />
+              </div>
+            )}
             <div className="flex items-center justify-between gap-2">
               <span className="text-sm text-muted">Tax</span>
               <input className="input mono !w-32 !py-1 text-right" type="number" step="0.01" min="0" value={tax} onChange={(e) => setTax(e.target.value)} />

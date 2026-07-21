@@ -36,6 +36,8 @@ const createSchema = z.object({
   // C2 — spread otherCharges (freight/duty/loading) into each item's landed cost.
   // NONE = expense it (old behaviour); VALUE = by line value; QTY = by quantity.
   landedBasis: z.enum(["NONE", "VALUE", "QTY"]).default("NONE"),
+  currency: z.string().trim().max(8).optional(),          // H4 — bill currency (default PKR)
+  fxRate: z.coerce.number().positive().optional(),        // H4 — 1 foreign unit = fxRate PKR
   notes: z.string().trim().max(1000).nullable().optional(),
   payments: z.array(paymentSchema).optional(),
 });
@@ -98,6 +100,17 @@ router.get("/:id", requirePermission("purchases.view"), async (req, res, next) =
 router.post("/", requirePermission("purchases.create"), async (req, res, next) => {
   try {
     const body = createSchema.parse(req.body);
+
+    // H4 — import-purchase FX: costs are entered in `currency` at `fxRate`; convert
+    // everything to PKR up front so all downstream math + the ledgers stay in PKR.
+    const currency = (body.currency || "PKR").toUpperCase();
+    const fxRate = currency !== "PKR" && body.fxRate && body.fxRate > 0 ? body.fxRate : 1;
+    if (fxRate !== 1) {
+      body.items = body.items.map((l) => ({ ...l, unitCost: round2(l.unitCost * fxRate), discount: round2(l.discount * fxRate) }));
+      body.discount = round2(body.discount * fxRate);
+      body.tax = round2(body.tax * fxRate);
+      body.otherCharges = round2(body.otherCharges * fxRate);
+    }
 
     const vendor = await prisma.vendor.findUnique({ where: { id: body.vendorId } });
     if (!vendor) return res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "Vendor not found" } });
@@ -176,6 +189,8 @@ router.post("/", requirePermission("purchases.create"), async (req, res, next) =
           tax: money(body.tax),
           otherCharges: money(body.otherCharges),
           landedBasis: landedBasisStored,
+          currency,
+          fxRate: new Prisma.Decimal(fxRate),
           grandTotal: money(grandTotal),
           paidAmount: money(paidAmount),
           dueAmount: money(dueAmount),

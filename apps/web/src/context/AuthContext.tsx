@@ -3,14 +3,14 @@ import { useNavigate } from "react-router-dom";
 import { api, setTokens, getRefreshToken } from "../lib/api";
 
 export type Role = "SUPER_ADMIN" | "ADMIN" | "MANAGER" | "CASHIER" | "ACCOUNTANT";
-export type User = { id: string; name: string; email: string; role: Role; phone?: string | null };
+export type User = { id: string; name: string; email: string; role: Role; phone?: string | null; totpEnabled?: boolean };
 
 type AuthState = {
   user: User | null;
   permissions: string[];
   can: (...keys: string[]) => boolean;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, totpCode?: string) => Promise<void>;
   register: (name: string, email: string, password: string, phone?: string) => Promise<void>;
   logout: () => Promise<void>;
 };
@@ -48,8 +48,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
-  async function login(email: string, password: string) {
-    const data = await api<AuthPayload>("/auth/login", { method: "POST", body: { email, password } });
+  async function login(email: string, password: string, totpCode?: string) {
+    const data = await api<AuthPayload>("/auth/login", { method: "POST", body: { email, password, ...(totpCode ? { totpCode } : {}) } });
     setTokens(data.accessToken, data.refreshToken);
     setUser(data.user);
     setPermissions(data.permissions ?? []);

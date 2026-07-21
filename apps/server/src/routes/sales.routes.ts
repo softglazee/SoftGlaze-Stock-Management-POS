@@ -45,6 +45,7 @@ const createSchema = z.object({
   overrideCredit: z.boolean().optional(),
   overrideDiscount: z.boolean().optional(), // G3 — manager approving an over-limit discount
   redeemPoints: z.coerce.number().int().min(0).optional(), // G4 — loyalty points to spend as a discount
+  clientRef: z.string().trim().max(60).optional(), // H7 — offline-POS idempotency key
 });
 
 const productForSale = { comboItems: { include: { componentProduct: { select: { id: true, name: true, type: true, costPrice: true } } } } } satisfies Prisma.ProductInclude;
@@ -150,6 +151,15 @@ router.get("/:id", requirePermission("sales.view_all", "sales.view_own"), async 
 router.post("/", requirePermission("sales.create"), async (req, res, next) => {
   try {
     const body = createSchema.parse(req.body);
+
+    // H7 — offline-POS idempotency: if this sale was already synced, return it (no dup).
+    if (body.clientRef) {
+      const existing = await prisma.sale.findUnique({ where: { clientRef: body.clientRef }, include: saleInclude });
+      if (existing) {
+        const canProfit = await roleHasPermission(req.user!.role, "reports.profit");
+        return res.status(200).json({ ok: true, data: { sale: scrubProfit(existing, canProfit), duplicate: true } });
+      }
+    }
 
     // Customer (optional; walk-in when null)
     let customer = null as null | { id: string; name: string; balance: Prisma.Decimal; creditLimit: Prisma.Decimal; loyaltyPoints: number };
@@ -283,7 +293,7 @@ router.post("/", requirePermission("sales.create"), async (req, res, next) => {
       const invoiceNo = await nextNumber(tx, "sale", "INV");
       const created = await tx.sale.create({
         data: {
-          invoiceNo, customerId: customer?.id ?? null, siteId, userId: req.user!.id, status: "COMPLETED", ...(body.date ? { date: body.date } : {}),
+          invoiceNo, customerId: customer?.id ?? null, siteId, userId: req.user!.id, status: "COMPLETED", clientRef: body.clientRef || null, ...(body.date ? { date: body.date } : {}),
           subTotal: money(subTotal), discount: money(effectiveDiscount), tax: money(body.tax), otherCharges: money(body.otherCharges), roundOff: money(roundOff),
           grandTotal: money(grandTotal), paidAmount: money(paidAmount), dueAmount: money(dueAmount), totalCost: money(totalCost), profit: money(profit), notes: body.notes || null,
         },

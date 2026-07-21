@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { FileText, Sheet, BarChart3, TrendingUp, Truck, Boxes, Users, Receipt, CreditCard, Activity, IdCard, CalendarClock, CalendarCheck, Tags, PackageMinus, LineChart, PackageX, Percent } from "lucide-react";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
+import { FileText, Sheet, BarChart3, TrendingUp, Truck, Boxes, Users, Receipt, CreditCard, Activity, IdCard, CalendarClock, CalendarCheck, Tags, PackageMinus, LineChart, PackageX, Percent, Landmark, Save } from "lucide-react";
 import { api, download, ApiError } from "../lib/api";
 import { ReportTable } from "../lib/types";
 import { fmtMoney } from "../lib/format";
@@ -26,6 +26,7 @@ const REPORTS: Cfg[] = [
   { key: "commission", label: "Salesman Commission", path: "/reports/commission", icon: Percent, period: true, perm: "reports.view" },
   { key: "attendance-sheet", label: "Attendance Sheet", path: "/reports/attendance-sheet", icon: CalendarCheck, month: true },
   { key: "sales-by-payment-method", label: "Sales by Payment Method", path: "/reports/sales-by-payment-method", icon: CreditCard, period: true },
+  { key: "tax-register", label: "Sales-Tax / GST Register", path: "/reports/tax-register", icon: Landmark, period: true },
   { key: "stock-movements", label: "Stock Movements", path: "/reports/stock-movements", icon: Activity, period: true },
   { key: "adjustments-by-reason", label: "Adjustments by Reason", path: "/reports/adjustments-by-reason", icon: PackageMinus, period: true, perm: "stock.adjust" },
   { key: "pending-deliveries", label: "Pending Deliveries", path: "/reports/pending-deliveries", icon: Truck },
@@ -92,6 +93,16 @@ function ReportView({ cfg }: { cfg: Cfg }) {
   });
   const report = data?.report;
 
+  // H2 — saved filter presets (per user, per report).
+  const qcR = useQueryClient();
+  const hasFilters = !!(cfg.period || cfg.filters || cfg.basis || cfg.month || cfg.product);
+  const { data: presets } = useQuery({ queryKey: ["saved-filters", cfg.key], queryFn: () => api<{ filters: { id: string; name: string; params: string }[] }>(`/saved-filters?reportKey=${cfg.key}`), enabled: hasFilters });
+  const savePreset = useMutation({ mutationFn: (name: string) => api("/saved-filters", { method: "POST", body: { reportKey: cfg.key, name, params: JSON.stringify({ from, to, basis, month, customerId, categoryId, productId }) } }), onSuccess: () => qcR.invalidateQueries({ queryKey: ["saved-filters", cfg.key] }) });
+  const delPreset = useMutation({ mutationFn: (id: string) => api(`/saved-filters/${id}`, { method: "DELETE" }), onSuccess: () => qcR.invalidateQueries({ queryKey: ["saved-filters", cfg.key] }) });
+  function loadPreset(params: string) {
+    try { const p = JSON.parse(params); if (p.from) setFrom(p.from); if (p.to) setTo(p.to); if (p.basis) setBasis(p.basis); if (p.month) setMonth(p.month); setCustomerId(p.customerId ?? ""); setCategoryId(p.categoryId ?? ""); setProductId(p.productId ?? ""); } catch { toast("Couldn't load that preset", "error"); }
+  }
+
   async function dl(format: "pdf" | "xlsx") {
     try {
       const ext = format === "pdf" ? "pdf" : "xlsx";
@@ -140,6 +151,20 @@ function ReportView({ cfg }: { cfg: Cfg }) {
           <div><label className="label">Product</label><select className="input !w-56" value={productId} onChange={(e) => setProductId(e.target.value)}><option value="">Choose a product…</option>{(prods?.products ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
         )}
         <div className="flex-1" />
+        {hasFilters && (
+          <>
+            {(presets?.filters.length ?? 0) > 0 && (
+              <div className="flex items-center gap-1">
+                <select className="input !w-40 !py-1.5 text-sm" defaultValue="" onChange={(e) => { const p = presets!.filters.find((f) => f.id === e.target.value); if (p) loadPreset(p.params); e.target.value = ""; }}>
+                  <option value="">Load preset…</option>
+                  {presets!.filters.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+                {presets!.filters.length > 0 && <button className="btn btn-secondary !px-2" title="Delete last preset" onClick={() => { const last = presets!.filters[presets!.filters.length - 1]; if (last && confirm(`Delete preset "${last.name}"?`)) delPreset.mutate(last.id); }}>×</button>}
+              </div>
+            )}
+            <button className="btn btn-secondary" onClick={() => { const name = prompt("Name this filter preset:"); if (name?.trim()) savePreset.mutate(name.trim()); }}><Save size={15} /> Save filter</button>
+          </>
+        )}
         <button className="btn btn-secondary" onClick={() => dl("pdf")} disabled={!report}><FileText size={15} /> PDF</button>
         <button className="btn btn-secondary" onClick={() => dl("xlsx")} disabled={!report}><Sheet size={15} /> Excel</button>
       </div>

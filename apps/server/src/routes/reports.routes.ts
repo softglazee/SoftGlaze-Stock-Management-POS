@@ -721,6 +721,37 @@ router.get("/backorders", requirePermission("reports.view"), async (req, res, ne
   }
 });
 
+// ─────────────────────────── GST / TAX REGISTER (H5) ───────────────────────────
+
+/** GET /reports/tax-register?from&to[&format] — output tax (sales) vs input tax (purchases). */
+router.get("/tax-register", requirePermission("reports.view"), async (req, res, next) => {
+  try {
+    const { from, to, meta } = periodOf(req);
+    const [saleTax, retTax, purTax, purRetTax] = await Promise.all([
+      prisma.sale.aggregate({ _sum: { tax: true, grandTotal: true }, where: { date: { gte: from, lte: to }, status: "COMPLETED", isReturn: false } }),
+      prisma.sale.aggregate({ _sum: { tax: true }, where: { date: { gte: from, lte: to }, isReturn: true } }),
+      prisma.purchase.aggregate({ _sum: { tax: true, grandTotal: true }, where: { date: { gte: from, lte: to }, status: "RECEIVED", isReturn: false } }),
+      prisma.purchase.aggregate({ _sum: { tax: true }, where: { date: { gte: from, lte: to }, isReturn: true } }),
+    ]);
+    const outputTax = r2(num(saleTax._sum.tax) - num(retTax._sum.tax));
+    const inputTax = r2(num(purTax._sum.tax) - num(purRetTax._sum.tax));
+    const net = r2(outputTax - inputTax);
+    const doc: ReportDoc = {
+      title: "Sales-Tax / GST Register",
+      meta,
+      columns: [{ header: "", key: "label" }, { header: "Amount", key: "amount", align: "right", money: true }],
+      rows: [
+        { label: "Output tax (collected on sales)", amount: outputTax },
+        { label: "Input tax (paid on purchases)", amount: -inputTax },
+      ],
+      totals: { label: net >= 0 ? "Net GST payable" : "Net GST refundable", amount: net },
+    };
+    return sendReport(res, fmtReq(req), "tax-register", doc, await loadSettings(), { summary: { outputTax, inputTax, net } });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ─────────────────────────── DASHBOARD ───────────────────────────
 
 /** GET /reports/dashboard — KPI cards + chart series */

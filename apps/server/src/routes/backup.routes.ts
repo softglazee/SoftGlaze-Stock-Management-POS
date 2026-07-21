@@ -8,9 +8,21 @@ import { Router } from "express";
 import { prisma } from "../lib/prisma";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { requirePermission } from "../middleware/permission";
+import { uploadSnapshot } from "../lib/cloud-backup";
 
 const router = Router();
 router.use(requireAuth);
+
+/** POST /backup/cloud-now — H1: upload a snapshot to the configured cloud URL now. */
+router.post("/cloud-now", requirePermission("backup.manage"), async (_req, res, next) => {
+  try {
+    const { bytes } = await uploadSnapshot();
+    res.json({ ok: true, data: { message: `Backup uploaded (${Math.round(bytes / 1024)} KB)` } });
+  } catch (err: any) {
+    if (err.status) return res.status(err.status).json({ ok: false, error: { code: err.code, message: err.message } });
+    next(err);
+  }
+});
 
 // Parents → children (create order; delete runs in reverse).
 const ORDER = [

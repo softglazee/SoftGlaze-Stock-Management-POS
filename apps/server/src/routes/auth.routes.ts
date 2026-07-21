@@ -5,6 +5,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { requireAuth, signAccessToken, signRefreshToken } from "../middleware/auth";
 import { getPermissionsForRole } from "../lib/permissions";
+import { generateSecret, verifyTotp, otpauthUri } from "../lib/totp";
 
 const router = Router();
 
@@ -18,10 +19,11 @@ const registerSchema = z.object({
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
+  totpCode: z.string().trim().optional(), // H3 — 2FA code when the account has it enabled
 });
 
-function publicUser(u: { id: string; name: string; email: string; role: any; phone?: string | null }) {
-  return { id: u.id, name: u.name, email: u.email, role: u.role, phone: u.phone ?? null };
+function publicUser(u: { id: string; name: string; email: string; role: any; phone?: string | null; totpEnabled?: boolean }) {
+  return { id: u.id, name: u.name, email: u.email, role: u.role, phone: u.phone ?? null, totpEnabled: !!u.totpEnabled };
 }
 
 async function issueTokens(user: { id: string; name: string; email: string; role: any }) {
@@ -90,6 +92,12 @@ router.post("/login", async (req, res, next) => {
     const valid = await bcrypt.compare(body.password, user.passwordHash);
     if (!valid) return badCreds();
 
+    // H3 — second factor when enabled for this account.
+    if (user.totpEnabled && user.totpSecret) {
+      if (!body.totpCode) return res.status(401).json({ ok: false, error: { code: "TOTP_REQUIRED", message: "Enter your 6-digit authenticator code" } });
+      if (!verifyTotp(user.totpSecret, body.totpCode)) return res.status(401).json({ ok: false, error: { code: "TOTP_INVALID", message: "That authenticator code is wrong or expired" } });
+    }
+
     const tokens = await issueTokens(user);
     await prisma.auditLog.create({ data: { userId: user.id, action: "LOGIN", ip: req.ip } });
     const permissions = await getPermissionsForRole(user.role);
@@ -148,6 +156,51 @@ router.post("/logout", requireAuth, async (req, res, next) => {
   try {
     await prisma.user.update({ where: { id: req.user!.id }, data: { refreshToken: null } });
     res.json({ ok: true, data: { message: "Logged out" } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─────────────────────────── H3 · TWO-FACTOR (TOTP) ───────────────────────────
+
+/** POST /auth/2fa/setup — generate a secret + otpauth URI (not yet enabled). */
+router.post("/2fa/setup", requireAuth, async (req, res, next) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.user!.id }, select: { email: true } });
+    if (!user) return res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "User not found" } });
+    const shop = (await prisma.setting.findUnique({ where: { key: "shop_name" } }))?.value || "SoftGlaze";
+    const secret = generateSecret();
+    await prisma.user.update({ where: { id: req.user!.id }, data: { totpSecret: secret, totpEnabled: false } });
+    res.json({ ok: true, data: { secret, otpauth: otpauthUri(secret, user.email, shop) } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** POST /auth/2fa/enable { code } — verify a code against the pending secret and turn 2FA on. */
+router.post("/2fa/enable", requireAuth, async (req, res, next) => {
+  try {
+    const code = String(req.body?.code ?? "");
+    const user = await prisma.user.findUnique({ where: { id: req.user!.id }, select: { totpSecret: true } });
+    if (!user?.totpSecret) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: "Start setup first" } });
+    if (!verifyTotp(user.totpSecret, code)) return res.status(400).json({ ok: false, error: { code: "TOTP_INVALID", message: "That code is wrong — try the current one" } });
+    await prisma.user.update({ where: { id: req.user!.id }, data: { totpEnabled: true } });
+    await prisma.auditLog.create({ data: { userId: req.user!.id, action: "2FA_ENABLED", entity: "User", entityId: req.user!.id, details: "2FA turned on" } });
+    res.json({ ok: true, data: { totpEnabled: true } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** POST /auth/2fa/disable { password } — turn 2FA off (re-auth with the password). */
+router.post("/2fa/disable", requireAuth, async (req, res, next) => {
+  try {
+    const password = String(req.body?.password ?? "");
+    const user = await prisma.user.findUnique({ where: { id: req.user!.id }, select: { passwordHash: true } });
+    if (!user || !(await bcrypt.compare(password, user.passwordHash))) return res.status(401).json({ ok: false, error: { code: "UNAUTHORIZED", message: "Password is wrong" } });
+    await prisma.user.update({ where: { id: req.user!.id }, data: { totpEnabled: false, totpSecret: null } });
+    await prisma.auditLog.create({ data: { userId: req.user!.id, action: "2FA_DISABLED", entity: "User", entityId: req.user!.id, details: "2FA turned off" } });
+    res.json({ ok: true, data: { totpEnabled: false } });
   } catch (err) {
     next(err);
   }

@@ -46,6 +46,7 @@ import messageRoutes from "./routes/messages.routes";
 import outreachRoutes from "./routes/outreach.routes";
 import auditRoutes from "./routes/audit.routes";
 import backupRoutes from "./routes/backup.routes";
+import savedFilterRoutes from "./routes/saved-filters.routes";
 
 const app = express();
 
@@ -111,7 +112,8 @@ app.use("/api/v1/notifications", notificationRoutes); // Phase 6 (bell + reminde
 app.use("/api/v1/messages", messageRoutes);      // Phase 6 (WhatsApp/email log)
 app.use("/api/v1/outreach", outreachRoutes);     // Batch E (statements, campaigns, reminders)
 app.use("/api/v1/audit", auditRoutes);           // Phase 6 (audit log viewer)
-app.use("/api/v1/backup", backupRoutes);         // Phase 6 (backup / restore)
+app.use("/api/v1/backup", backupRoutes);         // Phase 6 (backup / restore) + H1 cloud upload
+app.use("/api/v1/saved-filters", savedFilterRoutes); // H2 (saved report filter presets)
 
 /**
  * Serve the built web app on the same origin (Phase 7 desktop mode + optional single-

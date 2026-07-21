@@ -13,6 +13,8 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [needsSetup, setNeedsSetup] = useState(false);
+  const [totpNeeded, setTotpNeeded] = useState(false); // H3 — 2FA challenge
+  const [totpCode, setTotpCode] = useState("");
   const [shop, setShop] = useState<{ name: string; logo?: string }>({ name: "SoftGlaze" });
 
   // If no user exists yet (fresh install), send owner to Register
@@ -32,9 +34,12 @@ export default function Login() {
     setError(null);
     setBusy(true);
     try {
-      await login(email, password);
+      await login(email, password, totpNeeded ? totpCode : undefined);
     } catch (err) {
-      setError((err as ApiError).message ?? "Login failed");
+      const e = err as ApiError;
+      if (e.code === "TOTP_REQUIRED") { setTotpNeeded(true); setError(null); }
+      else if (e.code === "TOTP_INVALID") { setTotpNeeded(true); setError(e.message); }
+      else setError(e.message ?? "Login failed");
     } finally {
       setBusy(false);
     }
@@ -86,6 +91,15 @@ export default function Login() {
               <input id="password" type="password" className="input" placeholder="••••••••"
                 value={password} onChange={(e) => setPassword(e.target.value)} required />
             </div>
+
+            {totpNeeded && (
+              <div>
+                <label className="label" htmlFor="totp">Authenticator code</label>
+                <input id="totp" inputMode="numeric" autoComplete="one-time-code" className="input mono tracking-widest text-center" placeholder="123456"
+                  value={totpCode} onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, "").slice(0, 6))} required autoFocus />
+                <p className="text-muted text-xs mt-1">Enter the 6-digit code from your authenticator app.</p>
+              </div>
+            )}
 
             {error && <p className="text-danger text-sm">{error}</p>}
 

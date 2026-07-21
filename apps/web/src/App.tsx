@@ -34,6 +34,7 @@ import PurchaseOrders from "./pages/PurchaseOrders";
 import VendorNotes from "./pages/VendorNotes";
 import Labels from "./pages/Labels";
 import Outreach from "./pages/Outreach";
+import BankReconciliation from "./pages/BankReconciliation";
 import Expenses from "./pages/Expenses";
 import Employees from "./pages/Employees";
 import Reports from "./pages/Reports";
@@ -120,6 +121,7 @@ export default function App() {
         <Route path="/vendor-notes" element={<VendorNotes />} />
         <Route path="/labels" element={<Labels />} />
         <Route path="/outreach" element={<Outreach />} />
+        <Route path="/bank-reconciliation" element={<BankReconciliation />} />
         <Route path="/expenses" element={<Expenses />} />
         <Route path="/employees" element={<Employees />} />
         <Route path="/reports" element={<Reports />} />

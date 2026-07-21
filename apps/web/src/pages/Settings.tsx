@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, Fragment } from "react";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
-import { Store, Boxes, ShieldCheck, Plug, DatabaseBackup, ScrollText, Upload, Trash2, Image as ImageIcon, Send, RotateCcw, Download, AlertTriangle } from "lucide-react";
+import { Store, Boxes, ShieldCheck, Plug, DatabaseBackup, ScrollText, Upload, Trash2, Image as ImageIcon, Send, RotateCcw, Download, AlertTriangle, Smartphone } from "lucide-react";
 import { api, download, ApiError } from "../lib/api";
 import { BusinessPresetInfo, PermissionMatrix, AuditLogEntry, Paged } from "../lib/types";
 import { useAuth } from "../context/AuthContext";
@@ -13,6 +13,7 @@ const TABS: Tab[] = [
   { key: "permissions", label: "Roles & Permissions", icon: ShieldCheck, superOnly: true },
   { key: "integrations", label: "Integrations", icon: Plug, perm: "settings.integrations" },
   { key: "backup", label: "Backup", icon: DatabaseBackup, perm: "backup.manage" },
+  { key: "security", label: "Security (2FA)", icon: Smartphone },
   { key: "audit", label: "Audit Log", icon: ScrollText, perm: "audit.view" },
 ];
 
@@ -36,6 +37,7 @@ export default function Settings() {
       {tab === "permissions" && <PermissionsTab />}
       {tab === "integrations" && <IntegrationsTab />}
       {tab === "backup" && <BackupTab />}
+      {tab === "security" && <SecurityTab />}
       {tab === "audit" && <AuditTab />}
     </div>
   );
@@ -220,6 +222,7 @@ function IntegrationsTab() {
 
   const save = useMutation({ mutationFn: () => api("/settings/integrations", { method: "PATCH", body: form }), onSuccess: () => { toast("Integrations saved"); refetch(); }, onError: (e: ApiError) => toast(e.message, "error") });
   const test = useMutation({ mutationFn: () => api<{ message: string }>("/settings/test-email", { method: "POST", body: { to: testTo } }), onSuccess: (d) => toast(d.message), onError: (e: ApiError) => toast(e.message, "error") });
+  const cloudNow = useMutation({ mutationFn: () => api<{ message: string }>("/backup/cloud-now", { method: "POST" }), onSuccess: (d) => toast(d.message), onError: (e: ApiError) => toast(e.message, "error") });
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
@@ -270,7 +273,65 @@ function IntegrationsTab() {
         </div>
       </div>
 
+      <div className="card p-5 space-y-3 lg:col-span-2">
+        <h3 className="font-semibold display flex items-center gap-2"><Plug size={16} /> Offsite cloud backup</h3>
+        <p className="text-xs text-muted">Nightly, the full backup JSON is uploaded to a destination URL you provide — e.g. a pre-signed S3/Google Cloud PUT URL (it carries its own auth). Leave blank to keep it off.</p>
+        <div className="grid gap-3 sm:grid-cols-[1fr_auto] items-end">
+          <div><label className="label">Backup upload URL (PUT)</label><input className="input mono text-xs" value={s.backup_cloud_url ?? ""} onChange={(e) => set("backup_cloud_url", e.target.value)} placeholder="https://your-bucket.s3…/softglaze-backup.json?X-Amz-Signature=…" /></div>
+          <div><label className="label">Nightly</label><select className="input" value={s.backup_cloud_enabled ?? "0"} onChange={(e) => set("backup_cloud_enabled", e.target.value)}><option value="0">Off</option><option value="1">On</option></select></div>
+        </div>
+        <button className="btn btn-secondary" onClick={() => cloudNow.mutate()} disabled={cloudNow.isPending}>{cloudNow.isPending ? "Uploading…" : "Back up to cloud now"}</button>
+      </div>
+
       <div className="lg:col-span-2 flex justify-end"><button className="btn btn-secondary !border-accent !text-accent" onClick={() => save.mutate()} disabled={save.isPending}>{save.isPending ? "Saving…" : "Save integrations"}</button></div>
+    </div>
+  );
+}
+
+function SecurityTab() {
+  const { toast } = useToast();
+  const { user } = useAuth();
+  const [enabled, setEnabled] = useState<boolean>(!!user?.totpEnabled);
+  const [setup, setSetup] = useState<{ secret: string; otpauth: string } | null>(null);
+  const [code, setCode] = useState("");
+  const [pw, setPw] = useState("");
+
+  const begin = useMutation({ mutationFn: () => api<{ secret: string; otpauth: string }>("/auth/2fa/setup", { method: "POST" }), onSuccess: (d) => setSetup(d), onError: (e: ApiError) => toast(e.message, "error") });
+  const enable = useMutation({ mutationFn: () => api("/auth/2fa/enable", { method: "POST", body: { code } }), onSuccess: () => { toast("Two-factor is now ON"); setEnabled(true); setSetup(null); setCode(""); }, onError: (e: ApiError) => toast(e.message, "error") });
+  const disable = useMutation({ mutationFn: () => api("/auth/2fa/disable", { method: "POST", body: { password: pw } }), onSuccess: () => { toast("Two-factor turned off"); setEnabled(false); setPw(""); }, onError: (e: ApiError) => toast(e.message, "error") });
+
+  return (
+    <div className="card p-5 max-w-xl space-y-4">
+      <h3 className="font-semibold display flex items-center gap-2"><Smartphone size={16} /> Two-Factor Authentication</h3>
+      <p className="text-sm text-muted">Protect this account with a 6-digit code from an authenticator app (Google Authenticator, Authy…). Recommended for owner/admin accounts.</p>
+
+      {enabled ? (
+        <div className="space-y-3">
+          <p className="text-success text-sm flex items-center gap-1.5"><ShieldCheck size={15} /> 2FA is ON for your account.</p>
+          <div className="border-t border-edge pt-3 space-y-2">
+            <label className="label">Turn off — confirm your password</label>
+            <div className="flex gap-2">
+              <input className="input" type="password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder="your password" />
+              <button className="btn btn-secondary hover:!text-danger" onClick={() => disable.mutate()} disabled={disable.isPending || !pw}>Turn off</button>
+            </div>
+          </div>
+        </div>
+      ) : setup ? (
+        <div className="space-y-3">
+          <p className="text-sm">1. In your authenticator app, add an account and enter this key (or scan the link):</p>
+          <div className="rounded-lg border border-edge bg-surface-2 p-3 font-mono text-sm break-all select-all">{setup.secret}</div>
+          <a className="text-accent text-xs break-all" href={setup.otpauth}>{setup.otpauth}</a>
+          <div>
+            <label className="label">2. Enter the current 6-digit code to confirm</label>
+            <div className="flex gap-2">
+              <input className="input mono tracking-widest text-center !w-40" inputMode="numeric" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="123456" />
+              <button className="btn btn-primary" onClick={() => enable.mutate()} disabled={enable.isPending || code.length !== 6}>Enable 2FA</button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <button className="btn btn-primary" onClick={() => begin.mutate()} disabled={begin.isPending}>{begin.isPending ? "Preparing…" : "Set up 2FA"}</button>
+      )}
     </div>
   );
 }

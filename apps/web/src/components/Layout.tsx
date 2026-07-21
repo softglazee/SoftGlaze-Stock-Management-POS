@@ -3,7 +3,7 @@ import { NavLink, Outlet, Navigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   Anvil, LayoutDashboard, ShoppingCart, Package, FolderTree, Truck, Users,
-  Receipt, Wallet, BarChart3, Settings, LogOut, Banknote, IdCard, Ruler, Tag, Boxes, Landmark, UserCog, Menu, X, MessageSquare, UserCircle, ScrollText, CalendarClock, Building2, Tags, HandCoins, Coins, Scale, FileSignature, Route, Scissors, ClipboardList, QrCode, FileText, Megaphone, Undo2,
+  Receipt, Wallet, BarChart3, Settings, LogOut, Banknote, IdCard, Ruler, Tag, Boxes, Landmark, UserCog, Menu, X, MessageSquare, UserCircle, ScrollText, CalendarClock, Building2, Tags, HandCoins, Coins, Scale, FileSignature, Route, Scissors, ClipboardList, QrCode, FileText, Megaphone, Undo2, CheckCircle2,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { api, ApiError } from "../lib/api";
@@ -63,6 +63,7 @@ const NAV_GROUPS: { section?: string; items: { to: string; label: string; icon: 
     section: "Money",
     items: [
       { to: "/accounts", label: "Accounts & Cash", icon: Landmark, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "ACCOUNTANT"] },
+      { to: "/bank-reconciliation", label: "Bank Reconciliation", icon: CheckCircle2, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "ACCOUNTANT"] },
       { to: "/payments", label: "Payments", icon: Wallet, roles: ALL },
       { to: "/promises", label: "Promises", icon: HandCoins, roles: ALL },
       { to: "/cheques", label: "Cheques", icon: ScrollText, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "ACCOUNTANT"] },

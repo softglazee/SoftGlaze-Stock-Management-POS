@@ -87,6 +87,8 @@ const INTEGRATION_KEYS = [
   "whatsapp_mode", "whatsapp_number", "sms_enabled",
   // E2 — local SMS gateway (🔌 owner fills these)
   "sms_api_url", "sms_api_key", "sms_sender", "sms_method",
+  // H1 — offsite cloud backup (🔌 owner fills the destination URL)
+  "backup_cloud_url", "backup_cloud_enabled",
   // G8 message templates (WhatsApp text with {placeholders})
   "tmpl_wa_receipt", "tmpl_wa_reminder", "tmpl_wa_purchase", "tmpl_wa_statement", "tmpl_wa_quotation",
   // G8 email templates (subject + body, same {placeholders})

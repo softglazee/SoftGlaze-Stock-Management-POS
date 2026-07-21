@@ -30,6 +30,8 @@ model User {
   role         Role      @default(CASHIER)
   isActive     Boolean   @default(true)
   commissionPercent Decimal @default(0) @db.Decimal(5, 2) // F3 — salesman commission on their net sales
+  totpSecret   String?   // H3 — base32 TOTP secret (2FA), null = not enrolled
+  totpEnabled  Boolean   @default(false) // H3 — 2FA required at login for this user
   refreshToken String?   // hashed refresh token
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
@@ -55,6 +57,7 @@ model User {
   priceLogs        PriceHistory[]
   vendorNotes      VendorNote[]
   purchaseOrders   PurchaseOrder[]
+  savedFilters     SavedFilter[]
 }
 
 // ─────────────────────────── PERMISSIONS (A2) ───────────────────────────
@@ -407,6 +410,8 @@ model Purchase {
   // VALUE (by line value) or QTY (by quantity). When not NONE, each item's landedUnitCost
   // carries its freight share so inventory/COGS reflect the true landed cost.
   landedBasis  String         @default("NONE")
+  currency     String         @default("PKR")  // H4 — bill currency (books always store PKR)
+  fxRate       Decimal        @default(1) @db.Decimal(18, 6) // H4 — 1 foreign unit = fxRate PKR
   grandTotal   Decimal        @default(0) @db.Decimal(18, 2)
   paidAmount   Decimal        @default(0) @db.Decimal(18, 2)
   dueAmount    Decimal        @default(0) @db.Decimal(18, 2)
@@ -559,6 +564,7 @@ model Sale {
   returnOfId  String?                                      // original sale if return
   bookingId   String?                                      // set when this invoice fulfils an advance booking (F3)
   booking     Booking?   @relation(fields: [bookingId], references: [id])
+  clientRef   String?    @unique                            // H7 — offline-POS idempotency key (dedupe re-synced sales)
   siteId      String?                                      // C4 — which customer site/project this invoice is for
   site        CustomerSite? @relation(fields: [siteId], references: [id], onDelete: SetNull)
   createdAt   DateTime   @default(now())
@@ -649,6 +655,7 @@ model AccountEntry {
   refId     String?
   date      DateTime         @default(now())
   notes     String?
+  reconciledAt DateTime?                          // H6 — marked when matched to a bank statement line (memo only)
   createdAt DateTime         @default(now())
 
   @@index([accountId, date])
@@ -1347,6 +1354,20 @@ model MessageLog {
 model Setting {
   key   String @id      // shop_name, shop_logo, address, phone, tax_percent, currency, invoice_footer, receipt_size
   value String
+}
+
+// H2 — a saved report filter preset (per user). `params` is a JSON blob of the report
+// filter state (dates, basis, ids…). Pure UI convenience; no accounting effect.
+model SavedFilter {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reportKey String            // which report this preset belongs to
+  name      String            // user's label
+  params    String            // JSON string of the filter state
+  createdAt DateTime @default(now())
+
+  @@index([userId, reportKey])
 }
 
 model AuditLog {

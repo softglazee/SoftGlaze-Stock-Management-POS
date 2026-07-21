@@ -6,6 +6,7 @@ import { runSweep } from "./lib/notify";
 import { runRecurringExpenses } from "./lib/recurring";
 import { runUdhaarEscalation } from "./lib/reminders";
 import { runMonthlyStatementsIfDue } from "./lib/statements";
+import { runCloudBackupIfDue } from "./lib/cloud-backup";
 
 const PORT = Number(process.env.PORT ?? 4000);
 
@@ -44,6 +45,10 @@ async function scheduleSweep() {
       runMonthlyStatementsIfDue()
         .then((r) => r?.sent && console.log(`📧 Emailed ${r.sent} monthly statement(s)`))
         .catch((e) => console.error("Monthly statements failed:", e));
+      // H1 — offsite cloud backup (once/day if configured)
+      runCloudBackupIfDue()
+        .then((r) => r && console.log(`☁️  Uploaded cloud backup (${Math.round(r.bytes / 1024)} KB)`))
+        .catch((e) => console.error("Cloud backup failed:", e));
     });
     console.log(`⏰ Daily reminder sweep scheduled at ${row?.value || "09:00"}`);
   } catch (e) {

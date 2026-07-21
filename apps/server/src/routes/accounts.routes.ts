@@ -254,4 +254,41 @@ router.post("/capital", requirePermission("accounts.manage"), async (req, res, n
   }
 });
 
+// ─────────────────────────── H6 · BANK RECONCILIATION ───────────────────────────
+// Reconciliation is a memo status only (reconciledAt on an AccountEntry) — it moves no
+// money and changes no balance, so the ledgers/balance sheet are untouched.
+
+/** GET /accounts/:id/reconcile?from&to — this account's ledger entries with cleared status. */
+router.get("/:id/reconcile", requirePermission("accounts.view"), async (req, res, next) => {
+  try {
+    const from = req.query.from ? new Date(String(req.query.from)) : null;
+    const to = req.query.to ? new Date(String(req.query.to)) : null;
+    const account = await prisma.paymentMethod.findUnique({ where: { id: req.params.id }, select: { id: true, name: true, currentBalance: true } });
+    if (!account) return res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "Account not found" } });
+    const entries = await prisma.accountEntry.findMany({
+      where: { accountId: account.id, ...(from || to ? { date: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } } : {}) },
+      orderBy: { date: "desc" }, take: 1000,
+      select: { id: true, date: true, type: true, amount: true, notes: true, reconciledAt: true },
+    });
+    const clearedSum = Math.round(entries.filter((e) => e.reconciledAt).reduce((s, e) => s + Number(e.amount), 0) * 100) / 100;
+    res.json({ ok: true, data: { account, entries, clearedSum } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const reconcileSchema = z.object({ entryIds: z.array(z.string().min(1)).min(1), reconciled: z.boolean() });
+
+/** POST /accounts/reconcile — tick/untick entries as matched to the bank statement. */
+router.post("/reconcile", requirePermission("accounts.manage"), async (req, res, next) => {
+  try {
+    const body = reconcileSchema.parse(req.body);
+    const result = await prisma.accountEntry.updateMany({ where: { id: { in: body.entryIds } }, data: { reconciledAt: body.reconciled ? new Date() : null } });
+    res.json({ ok: true, data: { updated: result.count } });
+  } catch (err: any) {
+    if (err instanceof z.ZodError) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: err.errors[0].message } });
+    next(err);
+  }
+});
+
 export default router;
