@@ -398,6 +398,7 @@ export type DeliveryNote = {
   receiverName: string | null;
   notes: string | null;
   status: "DELIVERED" | "CANCELLED";
+  tripId?: string | null;
   sale?: { id: string; invoiceNo: string; date: string; customer?: { name: string; phone: string | null } | null };
   user?: { name: string };
   items: { id: string; saleItemId: string; qty: string; saleItem?: { product?: { name: string; sku: string; unit?: { shortName: string } } } }[];
@@ -406,6 +407,27 @@ export type DeliveryPending = {
   sale: { id: string; invoiceNo: string; customer: string };
   lines: { saleItemId: string; product: string; sku: string; unit: string; sold: number; delivered: number; remaining: number }[];
 };
+
+// ── Delivery trips / freight billing (C5) ──
+export type DeliveryTrip = {
+  id: string;
+  refNo: string;
+  date: string;
+  vehicleNo: string | null;
+  driverName: string | null;
+  driverPhone: string | null;
+  customerId: string | null;
+  customer?: { id: string; code: string; name: string; phone: string | null } | null;
+  freightCharged: string;
+  freightPaid: string;
+  expenseId: string | null;
+  expense?: { id: string; refNo: string } | null;
+  notes: string | null;
+  user?: { name: string };
+  challans: { id: string; refNo: string; sale?: { invoiceNo: string; customer?: { name: string } | null } }[];
+  margin: number;
+};
+export type DeliveryTripTotals = { charged: number; paid: number; margin: number };
 
 // ── Advance bookings (F3) ──
 export type BookingStatus = "OPEN" | "PARTIAL" | "COMPLETED" | "CANCELLED";

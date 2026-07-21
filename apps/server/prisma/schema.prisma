@@ -49,6 +49,7 @@ model User {
   leaveApprovals   LeaveRequest[]  @relation("LeaveApprover")
   paymentPromises  PaymentPromise[]
   dayCloses        DayClose[]
+  deliveryTrips    DeliveryTrip[]
 }
 
 // ─────────────────────────── PERMISSIONS (A2) ───────────────────────────
@@ -232,6 +233,7 @@ model Customer {
   promises PaymentPromise[]
   rateContracts RateContract[]
   sites    CustomerSite[]
+  deliveryTrips DeliveryTrip[]
 
   @@index([name])
   @@index([phone])
@@ -660,6 +662,8 @@ model DeliveryNote {
   receiverName String?
   notes        String?
   status       DeliveryStatus     @default(DELIVERED)
+  tripId       String?                                // C5 — the delivery trip this challan went on
+  trip         DeliveryTrip?      @relation(fields: [tripId], references: [id], onDelete: SetNull)
   userId       String
   user         User               @relation(fields: [userId], references: [id])
   createdAt    DateTime           @default(now())
@@ -668,6 +672,37 @@ model DeliveryNote {
 
   @@index([saleId])
   @@index([date])
+  @@index([tripId])
+}
+
+// ─────────────────────────── DELIVERY TRIPS (C5) ───────────────────────────
+// A vehicle run: driver + vehicle deliver one or more challans. `freightPaid` is the cost
+// paid to the transporter/driver — it optionally posts a real Expense (money out + P&L),
+// reversed if the trip is deleted. `freightCharged` is what was recovered from the
+// customer(s); it is RECORD-ONLY (the real recovery already sits on the sale invoices as
+// otherCharges, so re-posting it would double-count) and drives the delivery-margin view.
+model DeliveryTrip {
+  id             String         @id @default(cuid())
+  refNo          String         @unique // TRP-0001
+  date           DateTime       @default(now())
+  vehicleNo      String?
+  driverName     String?
+  driverPhone    String?
+  customerId     String?                              // optional — a trip for one customer
+  customer       Customer?      @relation(fields: [customerId], references: [id])
+  freightCharged Decimal        @default(0) @db.Decimal(18, 2) // recovered from customer(s) — record only
+  freightPaid    Decimal        @default(0) @db.Decimal(18, 2) // paid to transporter/driver (posts an Expense if an account is chosen)
+  expenseId      String?        @unique                        // the Expense created for freightPaid (reversed on delete)
+  expense        Expense?       @relation(fields: [expenseId], references: [id])
+  notes          String?
+  userId         String
+  user           User           @relation(fields: [userId], references: [id])
+  createdAt      DateTime       @default(now())
+
+  challans       DeliveryNote[]
+
+  @@index([date])
+  @@index([customerId])
 }
 
 model DeliveryNoteItem {
@@ -778,6 +813,7 @@ model Expense {
   payment     Payment?
   recurringId String?                            // set when auto-posted from a recurring rule
   recurring   RecurringExpense? @relation(fields: [recurringId], references: [id], onDelete: SetNull)
+  deliveryTrip DeliveryTrip?                     // set when this expense is a trip's freight-paid (C5)
   createdAt   DateTime          @default(now())
 
   @@index([date])

@@ -25,6 +25,7 @@ import accountRoutes from "./routes/accounts.routes";
 import paymentRoutes from "./routes/payments.routes";
 import chequeRoutes from "./routes/cheques.routes";
 import deliveryRoutes from "./routes/deliveries.routes";
+import deliveryTripRoutes from "./routes/delivery-trips.routes";
 import bookingRoutes from "./routes/bookings.routes";
 import estimatorRoutes from "./routes/estimator.routes";
 import ledgerRoutes from "./routes/ledger.routes";
@@ -87,6 +88,7 @@ app.use("/api/v1/payments", paymentRoutes);      // Phase 4 (customer receipts, 
 app.use("/api/v1/day-close", dayCloseRoutes);    // B1+B2 (cash count + day-close / Z-report)
 app.use("/api/v1/cheques", chequeRoutes);        // F1 (post-dated cheque register)
 app.use("/api/v1/deliveries", deliveryRoutes);   // F2 (delivery challans)
+app.use("/api/v1/delivery-trips", deliveryTripRoutes); // C5 (vehicle/trip & freight billing)
 app.use("/api/v1/bookings", bookingRoutes);      // F3 (advance bookings with rate lock)
 app.use("/api/v1/estimator", estimatorRoutes);   // F4 (construction material estimator)
 app.use("/api/v1/ledger", ledgerRoutes);         // Phase 4 (customer & vendor statements)
