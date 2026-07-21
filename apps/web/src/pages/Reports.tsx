@@ -11,6 +11,7 @@ type Cfg = { key: string; label: string; path: string; icon: typeof FileText; pe
 
 const REPORTS: Cfg[] = [
   { key: "profit-loss", label: "Profit & Loss", path: "/reports/profit-loss", icon: TrendingUp, period: true, perm: "reports.profit" },
+  { key: "comparison", label: "Period Comparison", path: "/reports/comparison", icon: BarChart3, period: true, perm: "reports.profit" },
   { key: "sales", label: "Sales Register", path: "/reports/sales", icon: Receipt, period: true, filters: true },
   { key: "top-customers", label: "Top Customers", path: "/reports/top-customers", icon: Users, period: true },
   { key: "margins-by-group", label: "Margins by Price Group", path: "/reports/margins-by-group", icon: Tags, period: true, perm: "reports.profit" },

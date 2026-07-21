@@ -92,5 +92,6 @@ Effort key: **S** ≈ half-day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
 ## Status
 - [x] **A1 Recurring expenses** — DONE (migration `20260720193103_a1_recurring_expenses`; 12/12 checks; commit `ce1511c`).
 - [x] **A2 Categorised stock-adjustment reasons** — DONE (migration `20260720232459_a2_adjustment_reasons`; 11/11 checks; balance sheet ₨0).
-- [ ] A3 Comparative reports (MoM / YoY) — **next**
-- [ ] A4 … (remaining, in the order above)
+- [x] **A3 Comparative reports (MoM / YoY)** — DONE (no schema change; new `/reports/comparison`; 10/10 checks).
+- [ ] A4 Promise-to-pay tracking — **next**
+- [ ] A5 … (remaining, in the order above)

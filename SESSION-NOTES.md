@@ -17,7 +17,9 @@ Owner approved a 36-feature batch (`docs/13-FEATURE-BATCH-PLAN.md`, beyond docs/
 - **Accounting checked:** stock write-offs already balance — `computeBalanceSheet` recognises `adjustmentValue = Σ(ADJUSTMENT_IN/OUT/DAMAGE qty×unitCost)` in retained earnings, so a breakage loss reduces equity and Assets=Liab+Equity holds. A2's ADJUSTMENT_OUT→DAMAGE retype stays inside that same set → no balance-sheet change.
 - **Verified (throwaway DB, dropped):** 11/11 — breakage loss ₨3,500, sample ₨1,400, total loss ₨4,900, stock nets 100→96, integrity all-green + **balance sheet ₨0**. Both apps tsc clean.
 
-**Next:** A3 — comparative reports (MoM / YoY columns on existing reports; no schema change).
+**A3 — Comparative reports (MoM / YoY) (DONE).** New `GET /reports/comparison?from&to` — this period vs the immediately-preceding equal-length window vs the same dates last year, with % change, for Net sales / COGS / Gross profit / Expenses / Net profit (net profit is the totals row). No schema change: a shared `plMetrics(from,to)` helper reuses the accrual P&L math; the "vs prev / vs LY" columns are plain-string % cells ("+12.5%" / "—" / "new") which the exporter renders fine in table/PDF/Excel. Web: one registry line in `Reports.tsx` (BarChart3, gated `reports.profit`) — the generic ReportView renders it. **Verified (throwaway DB, dropped):** 10/10 — backdated sales into each window gave current ₨10,000 / prev ₨5,000 (+100%) / last-year ₨8,000 (+25%), net-profit row 3,000/1,500/2,400, integrity green. Both apps tsc clean.
+
+**Next:** A4 — promise-to-pay tracking (log a promised payment date on a customer's receivable + a follow-up alert).
 
 ---
 

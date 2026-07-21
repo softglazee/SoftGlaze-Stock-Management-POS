@@ -1020,4 +1020,66 @@ router.get("/adjustments-by-reason", requirePermission("stock.adjust"), async (r
   }
 });
 
+// ─────────────────────── PERIOD COMPARISON — MoM / YoY (A3) ───────────────────────
+
+/** Core accrual P&L figures for a window — reused for each comparison period. */
+async function plMetrics(from: Date, to: Date) {
+  const where = { date: { gte: from, lte: to } } as const;
+  const [salesAgg, retAgg, expAgg] = await Promise.all([
+    prisma.sale.aggregate({ _sum: { grandTotal: true, totalCost: true }, where: { ...where, status: "COMPLETED", isReturn: false } }),
+    prisma.sale.aggregate({ _sum: { grandTotal: true, totalCost: true }, where: { ...where, isReturn: true } }),
+    prisma.expense.aggregate({ _sum: { amount: true }, where }),
+  ]);
+  const netSales = r2(num(salesAgg._sum.grandTotal) - num(retAgg._sum.grandTotal));
+  const cogs = r2(num(salesAgg._sum.totalCost) - num(retAgg._sum.totalCost));
+  const grossProfit = r2(netSales - cogs);
+  const expenses = r2(num(expAgg._sum.amount));
+  const netProfit = r2(grossProfit - expenses);
+  return { netSales, cogs, grossProfit, expenses, netProfit };
+}
+
+/**
+ * GET /reports/comparison?from&to[&format] — this period vs the immediately-preceding
+ * period of equal length (MoM-style) vs the same dates last year (YoY), with % change.
+ */
+router.get("/comparison", requirePermission("reports.profit"), async (req, res, next) => {
+  try {
+    const { from, to } = periodOf(req);
+    const len = to.getTime() - from.getTime();
+    const prevTo = new Date(from.getTime() - 1);
+    const prevFrom = new Date(prevTo.getTime() - len);
+    const lyFrom = new Date(from); lyFrom.setFullYear(lyFrom.getFullYear() - 1);
+    const lyTo = new Date(to); lyTo.setFullYear(lyTo.getFullYear() - 1);
+
+    const [cur, prev, ly] = await Promise.all([plMetrics(from, to), plMetrics(prevFrom, prevTo), plMetrics(lyFrom, lyTo)]);
+    const fmt = (d: Date) => d.toLocaleDateString("en-GB");
+    const pct = (c: number, b: number) => {
+      if (b === 0) return c === 0 ? "—" : "new";
+      const p = r2(((c - b) / Math.abs(b)) * 100);
+      return `${p >= 0 ? "+" : ""}${p}%`;
+    };
+    type M = Awaited<ReturnType<typeof plMetrics>>;
+    const row = (label: string, key: keyof M) => ({ metric: label, current: cur[key], previous: prev[key], chgPrev: pct(cur[key], prev[key]), lastYear: ly[key], chgYoY: pct(cur[key], ly[key]) });
+
+    const columns = [
+      { header: "Metric", key: "metric" },
+      { header: "This period", key: "current", align: "right" as const, money: true },
+      { header: "Prev period", key: "previous", align: "right" as const, money: true },
+      { header: "Δ vs prev", key: "chgPrev", align: "right" as const },
+      { header: "Last year", key: "lastYear", align: "right" as const, money: true },
+      { header: "Δ vs LY", key: "chgYoY", align: "right" as const },
+    ];
+    const rows = [row("Net sales", "netSales"), row("Cost of goods sold", "cogs"), row("Gross profit", "grossProfit"), row("Expenses", "expenses")];
+    const totals = row("Net profit", "netProfit");
+    const meta = [
+      { label: "This period", value: `${fmt(from)} – ${fmt(to)}` },
+      { label: "Prev period", value: `${fmt(prevFrom)} – ${fmt(prevTo)}` },
+      { label: "Last year", value: `${fmt(lyFrom)} – ${fmt(lyTo)}` },
+    ];
+    return sendReport(res, fmtReq(req), "period-comparison", { title: "Period Comparison (MoM / YoY)", meta, columns, rows, totals }, await loadSettings());
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;
