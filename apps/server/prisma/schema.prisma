@@ -178,6 +178,7 @@ model Product {
   bookingItems   BookingItem[]
   estimatorItems EstimatorItem[]
   priceOverrides PriceGroupItem[]
+  rateContractItems RateContractItem[]
 
   @@index([name])
   @@index([categoryId])
@@ -229,6 +230,7 @@ model Customer {
   cheques  Cheque[]
   bookings Booking[]
   promises PaymentPromise[]
+  rateContracts RateContract[]
 
   @@index([name])
   @@index([phone])
@@ -261,6 +263,40 @@ model PriceGroupItem {
   price        Decimal    @db.Decimal(18, 2) // absolute override price for this product in this group
 
   @@unique([priceGroupId, productId])
+}
+
+// ─────────────────────────── RATE CONTRACTS (C3) ───────────────────────────
+// A contractor negotiates fixed per-item rates that hold for a date range (e.g. "12mm
+// sariya at ₨290/kg, Jan–Mar"). When that customer is on the POS, their contract rate
+// auto-fills the sale line for the covered products, overriding the list price. Like
+// price groups this ONLY pre-fills the POS — the sale still stores the posted unitPrice
+// snapshot, so expiring or editing a contract never changes past bills.
+model RateContract {
+  id         String             @id @default(cuid())
+  refNo      String             @unique // RC-0001
+  customerId String
+  customer   Customer           @relation(fields: [customerId], references: [id])
+  name       String                             // "Q1 2026 rates"
+  validFrom  DateTime
+  validUntil DateTime
+  isActive   Boolean            @default(true)
+  notes      String?
+  createdAt  DateTime           @default(now())
+  items      RateContractItem[]
+
+  @@index([customerId])
+  @@index([validFrom, validUntil])
+}
+
+model RateContractItem {
+  id         String       @id @default(cuid())
+  contractId String
+  contract   RateContract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product      @relation(fields: [productId], references: [id])
+  price      Decimal      @db.Decimal(18, 2) // agreed unit rate for this product
+
+  @@unique([contractId, productId])
 }
 
 model Vendor {

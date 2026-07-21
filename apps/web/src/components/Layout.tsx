@@ -3,7 +3,7 @@ import { NavLink, Outlet, Navigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   Anvil, LayoutDashboard, ShoppingCart, Package, FolderTree, Truck, Users,
-  Receipt, Wallet, BarChart3, Settings, LogOut, Banknote, IdCard, Ruler, Tag, Boxes, Landmark, UserCog, Menu, X, MessageSquare, UserCircle, ScrollText, CalendarClock, Building2, Tags, HandCoins, Coins, Scale,
+  Receipt, Wallet, BarChart3, Settings, LogOut, Banknote, IdCard, Ruler, Tag, Boxes, Landmark, UserCog, Menu, X, MessageSquare, UserCircle, ScrollText, CalendarClock, Building2, Tags, HandCoins, Coins, Scale, FileSignature,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { api, ApiError } from "../lib/api";
@@ -48,6 +48,7 @@ const NAV_GROUPS: { section?: string; items: { to: string; label: string; icon: 
       { to: "/customers", label: "Customers", icon: Users, roles: ALL },
       { to: "/vendors", label: "Vendors", icon: Truck, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "ACCOUNTANT"] },
       { to: "/price-groups", label: "Price Groups", icon: Tags, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER"] },
+      { to: "/rate-contracts", label: "Rate Contracts", icon: FileSignature, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER"] },
       { to: "/employees", label: "Employees", icon: IdCard, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER"] },
     ],
   },

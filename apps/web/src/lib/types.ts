@@ -115,6 +115,24 @@ export type Customer = {
 export type PriceGroupItem = { id: string; productId: string; product?: { id: string; name: string; sku: string; salePrice: string }; price: string };
 export type PriceGroup = { id: string; name: string; discountPercent: string; sortOrder: number; isActive: boolean; items: PriceGroupItem[]; _count?: { customers: number } };
 
+// ── Rate contracts (C3) ──
+export type RateContractStatus = "active" | "upcoming" | "expired" | "inactive";
+export type RateContractItem = { id: string; productId: string; product?: { id: string; name: string; sku: string; salePrice: string; unit?: { shortName: string } }; price: string };
+export type RateContract = {
+  id: string;
+  refNo: string;
+  customerId: string;
+  customer?: { id: string; code: string; name: string; phone: string | null };
+  name: string;
+  validFrom: string;
+  validUntil: string;
+  isActive: boolean;
+  notes: string | null;
+  status: RateContractStatus;
+  items: RateContractItem[];
+};
+export type RateResolution = { rates: { productId: string; price: number }[]; count: number; primary: { id: string; refNo: string; name: string; validFrom: string; validUntil: string } | null };
+
 export type Vendor = {
   id: string;
   code: string;

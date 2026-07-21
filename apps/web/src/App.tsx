@@ -18,6 +18,7 @@ import Sales from "./pages/Sales";
 import Customers from "./pages/Customers";
 import Vendors from "./pages/Vendors";
 import PriceGroups from "./pages/PriceGroups";
+import RateContracts from "./pages/RateContracts";
 import Accounts from "./pages/Accounts";
 import Payments from "./pages/Payments";
 import Promises from "./pages/Promises";
@@ -87,6 +88,7 @@ export default function App() {
         <Route path="/weight-calc" element={<WeightCalc />} />
         <Route path="/customers" element={<Customers />} />
         <Route path="/price-groups" element={<PriceGroups />} />
+        <Route path="/rate-contracts" element={<RateContracts />} />
         <Route path="/vendors" element={<Vendors />} />
         <Route path="/accounts" element={<Accounts />} />
         <Route path="/payments" element={<Payments />} />

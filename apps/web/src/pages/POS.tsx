@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Search, X, Plus, Trash2, UserPlus, ArrowLeft, Pause, FileText, CheckCircle2, Printer, Package, Scale } from "lucide-react";
+import { Search, X, Plus, Trash2, UserPlus, ArrowLeft, Pause, FileText, CheckCircle2, Printer, Package, Scale, FileSignature } from "lucide-react";
 import { api, ApiError } from "../lib/api";
-import { Product, Customer, PaymentMethod, Sale, WeightCalc } from "../lib/types";
+import { Product, Customer, PaymentMethod, Sale, WeightCalc, RateResolution } from "../lib/types";
 import { num, fmtMoney, fmtQty } from "../lib/format";
 import { useAuth } from "../context/AuthContext";
 import { useToast, Modal, Badge } from "../components/ui";
@@ -13,7 +13,7 @@ import WeightCalcPanel, { type WeightProfile } from "../components/WeightCalcPan
 import { printReceipt } from "../lib/receipt";
 import { waLink as buildWaLink } from "../lib/phone";
 
-type Line = { productId: string; name: string; sku: string; type: Product["type"]; unitShort: string; qty: string; unitPrice: string; discount: string; stock: number; calc: (WeightProfile & { weightCalc: WeightCalc }) | null };
+type Line = { productId: string; name: string; sku: string; type: Product["type"]; unitShort: string; qty: string; unitPrice: string; listPrice: string; contractPriced: boolean; priceEdited: boolean; discount: string; stock: number; calc: (WeightProfile & { weightCalc: WeightCalc }) | null };
 type PayRow = { methodId: string; amount: string };
 type SelCustomer = { id: string; name: string; phone: string | null; balance: string; creditLimit: string } | null;
 
@@ -49,6 +49,16 @@ export default function POS() {
   });
   // Default catalog shown before searching — click any tile to add it.
   const { data: allProducts } = useQuery({ queryKey: ["pos-all-products"], queryFn: () => api<{ products: Product[] }>("/products?limit=100&status=active") });
+  // C3 — the selected customer's contract rates in force today (auto-fill the sale line).
+  const { data: rateData } = useQuery({
+    queryKey: ["pos-rates", customer?.id],
+    queryFn: () => api<RateResolution>(`/rate-contracts/rates/${customer!.id}`),
+    enabled: !!customer?.id,
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+  });
+  const rateMap = useMemo(() => new Map((rateData?.rates ?? []).map((r) => [r.productId, r.price])), [rateData]);
+  const activeContract = customer && rateData?.primary ? rateData.primary : null;
   const methods = methodData?.methods ?? [];
   const cashMethodId = methods.find((m) => m.isCash)?.id ?? methods[0]?.id ?? "";
 
@@ -72,6 +82,17 @@ export default function POS() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payable, cashMethodId]);
 
+  // C3 — when the customer (and their contract rates) change, re-price every cart line the
+  // cashier hasn't manually edited: contract rate if the product is covered, else list price.
+  useEffect(() => {
+    setCart((c) => c.map((l) => {
+      if (l.priceEdited) return l;
+      const cr = rateMap.get(l.productId);
+      return cr != null ? { ...l, unitPrice: String(cr), contractPriced: true } : { ...l, unitPrice: l.listPrice, contractPriced: false };
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customer?.id, rateData]);
+
   function addProduct(p: Product) {
     setProdSearch("");
     setCart((c) => {
@@ -80,7 +101,10 @@ export default function POS() {
       const calc = p.weightCalc && p.weightCalc !== "NONE"
         ? { weightCalc: p.weightCalc, diameterMm: p.diameterMm, thicknessMm: p.thicknessMm, sheetWidthFt: p.sheetWidthFt, pieceLengthFt: p.pieceLengthFt, densityKgM3: p.densityKgM3 }
         : null;
-      return [...c, { productId: p.id, name: p.name, sku: p.sku, type: p.type, unitShort: p.unit?.shortName ?? "", qty: "1", unitPrice: String(num(p.salePrice)), discount: "0", stock: num(p.stockQty), calc }];
+      const list = num(p.salePrice);
+      const contractRate = rateMap.get(p.id); // C3 — this customer's agreed rate, if any
+      const priced = contractRate != null ? contractRate : list;
+      return [...c, { productId: p.id, name: p.name, sku: p.sku, type: p.type, unitShort: p.unit?.shortName ?? "", qty: "1", unitPrice: String(priced), listPrice: String(list), contractPriced: contractRate != null, priceEdited: false, discount: "0", stock: num(p.stockQty), calc }];
     });
     searchRef.current?.focus();
   }
@@ -196,6 +220,11 @@ export default function POS() {
           {/* Customer */}
           <div className="p-3 border-b border-edge">
             <CustomerBar customer={customer} onPick={setCustomer} onQuickAdd={() => setQuickAdd({ name: "", phone: "" })} />
+            {activeContract && (
+              <div className="mt-2 text-xs text-accent bg-accent/10 border border-accent/30 rounded px-2 py-1 flex items-center gap-1.5">
+                <FileSignature size={12} /> Contract {activeContract.refNo} — agreed rates apply (until {new Date(activeContract.validUntil).toLocaleDateString("en-GB")})
+              </div>
+            )}
           </div>
 
           {/* Lines */}
@@ -209,7 +238,7 @@ export default function POS() {
                     <tr key={l.productId} className="border-b border-edge align-top">
                       <td className="px-3 py-2">
                         <div className="font-medium leading-tight">{l.name}</div>
-                        <div className="mono text-muted text-xs">{l.sku}{l.type !== "STANDARD" && ` · ${l.type.toLowerCase()}`}{l.type === "STANDARD" && num(l.qty) > l.stock && <span className="text-danger"> · only {l.stock} in stock</span>}</div>
+                        <div className="mono text-muted text-xs">{l.sku}{l.type !== "STANDARD" && ` · ${l.type.toLowerCase()}`}{l.contractPriced && <span className="text-accent"> · contract</span>}{l.type === "STANDARD" && num(l.qty) > l.stock && <span className="text-danger"> · only {l.stock} in stock</span>}</div>
                         <div className="flex items-center gap-1.5 mt-1">
                           <input className="input mono !py-1 !w-16 text-right" type="number" step="any" min="0" value={l.qty} onChange={(e) => setLine(i, { qty: e.target.value })} aria-label="Qty" />
                           {l.calc && (
@@ -218,7 +247,7 @@ export default function POS() {
                             </button>
                           )}
                           <span className="text-muted text-xs">{l.unitShort} ×</span>
-                          <input className="input mono !py-1 !w-24 text-right" type="number" step="0.01" min="0" value={l.unitPrice} readOnly={!canEditPrice} onChange={(e) => setLine(i, { unitPrice: e.target.value })} aria-label="Unit price" title={canEditPrice ? "" : "Price editing needs permission"} />
+                          <input className="input mono !py-1 !w-24 text-right" type="number" step="0.01" min="0" value={l.unitPrice} readOnly={!canEditPrice} onChange={(e) => setLine(i, { unitPrice: e.target.value, priceEdited: true, contractPriced: false })} aria-label="Unit price" title={canEditPrice ? "" : "Price editing needs permission"} />
                           <span className="text-muted text-xs" title="Discount on this item">− </span>
                           <input className="input mono !py-1 !w-20 text-right" type="number" step="0.01" min="0" value={l.discount} onChange={(e) => setLine(i, { discount: e.target.value })} aria-label="Item discount" title="Discount on this item (Rs)" />
                         </div>
@@ -301,7 +330,7 @@ export default function POS() {
   );
 
   function loadSale(s: Sale) {
-    setCart(s.items.map((it) => ({ productId: it.productId, name: it.product?.name ?? "", sku: it.product?.sku ?? "", type: it.product?.type ?? "STANDARD", unitShort: it.product?.unit?.shortName ?? "", qty: String(num(it.qty)), unitPrice: String(num(it.unitPrice)), discount: String(num(it.discount)), stock: 0, calc: null })));
+    setCart(s.items.map((it) => ({ productId: it.productId, name: it.product?.name ?? "", sku: it.product?.sku ?? "", type: it.product?.type ?? "STANDARD", unitShort: it.product?.unit?.shortName ?? "", qty: String(num(it.qty)), unitPrice: String(num(it.unitPrice)), listPrice: String(num(it.unitPrice)), contractPriced: false, priceEdited: true, discount: String(num(it.discount)), stock: 0, calc: null })));
     setCustomer(s.customer ? { id: s.customer.id, name: s.customer.name, phone: s.customer.phone, balance: "0", creditLimit: "0" } : null);
     setBillDiscount(String(num(s.discount))); setTax(String(num(s.tax))); setOtherCharges(String(num(s.otherCharges)));
     setPayTouched(false); setPayments([]); setError(null);
