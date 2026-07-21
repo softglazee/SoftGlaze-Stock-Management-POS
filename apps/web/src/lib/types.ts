@@ -651,3 +651,29 @@ export type BusinessPresetInfo = {
 };
 
 export type Paged<T extends string, V> = { total: number; page: number; pages: number } & Record<T, V[]>;
+
+// ── Cutting & offcuts (C6) ──
+export type CutOutputKind = "PIECE" | "OFFCUT";
+export type CuttingOutput = {
+  id: string;
+  productId: string;
+  product?: { id: string; name: string; sku: string; unit?: { shortName: string } };
+  kind: CutOutputKind;
+  qty: string;
+  lengthFt: string | null;
+  unitCost: string;
+};
+export type CuttingJob = {
+  id: string;
+  number: string;
+  date: string;
+  sourceProductId: string;
+  sourceProduct?: { id: string; name: string; sku: string; unit?: { shortName: string } };
+  sourceQty: string;
+  sourceUnitCost: string;
+  wastageQty: string;
+  totalCost: string;
+  notes: string | null;
+  user?: { name: string };
+  outputs: CuttingOutput[];
+};

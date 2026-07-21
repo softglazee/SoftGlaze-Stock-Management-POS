@@ -50,6 +50,7 @@ model User {
   paymentPromises  PaymentPromise[]
   dayCloses        DayClose[]
   deliveryTrips    DeliveryTrip[]
+  cuttingJobs      CuttingJob[]
 }
 
 // ─────────────────────────── PERMISSIONS (A2) ───────────────────────────
@@ -180,6 +181,8 @@ model Product {
   estimatorItems EstimatorItem[]
   priceOverrides PriceGroupItem[]
   rateContractItems RateContractItem[]
+  cutSources     CuttingJob[]    @relation("CutSource")  // C6 — bars cut FROM this product
+  cutOutputs     CuttingOutput[] @relation("CutOutput")  // C6 — pieces/offcuts cut INTO this product
 
   @@index([name])
   @@index([categoryId])
@@ -851,6 +854,8 @@ enum StockMoveType {
   ADJUSTMENT_OUT
   DAMAGE
   OPENING
+  CUT_OUT // C6 — full bar/length consumed by a cutting job
+  CUT_IN  // C6 — cut piece / offcut produced back into stock by a cutting job
 }
 
 // Source of truth for stock. Product.stockQty is a cached sum.
@@ -903,6 +908,52 @@ model StockAdjustmentItem {
   productId    String
   product      Product         @relation(fields: [productId], references: [id])
   qtyChange    Decimal         @db.Decimal(18, 3) // +5 or -3
+}
+
+// ─────────────────────────── CUTTING & OFFCUTS (C6) ───────────────────────────
+// Cut a full bar/pipe/sheet into the piece the customer needs + leftover offcuts.
+// A cutting job is a VALUE-CONSERVING stock conversion (no money moves): the source
+// stock leaves (CUT_OUT) and the produced pieces/offcuts come back in (CUT_IN) at a
+// cost split from the source by length/qty, so total inventory value is unchanged.
+// An optional wastage (saw kerf / unusable scrap) leaves as a DAMAGE move — a real,
+// recognised loss (P&L) — which is exactly the schema's WASTAGE reason. Because the
+// pieces re-enter stock at their allocated cost, a later sale carries the correct COGS
+// and the balance sheet stays exact (rounding absorbed by the existing revaluation term).
+
+enum CutOutputKind {
+  PIECE  // the usable cut length (typically sold next)
+  OFFCUT // leftover remnant returned to stock for later sale
+}
+
+model CuttingJob {
+  id              String   @id @default(cuid())
+  number          String   @unique                       // CUT-000001 (Counter)
+  date            DateTime @default(now())
+  sourceProductId String
+  sourceProduct   Product  @relation("CutSource", fields: [sourceProductId], references: [id])
+  sourceQty       Decimal  @db.Decimal(18, 3)            // full bars/length consumed
+  sourceUnitCost  Decimal  @db.Decimal(18, 2)            // weighted-avg cost snapshot at cut time
+  wastageQty      Decimal  @default(0) @db.Decimal(18, 3) // kerf/scrap (recognised as a DAMAGE loss)
+  totalCost       Decimal  @db.Decimal(18, 2)            // sourceQty × sourceUnitCost (record)
+  notes           String?
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  outputs         CuttingOutput[]
+  createdAt       DateTime @default(now())
+
+  @@index([date])
+}
+
+model CuttingOutput {
+  id        String        @id @default(cuid())
+  jobId     String
+  job       CuttingJob    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product       @relation("CutOutput", fields: [productId], references: [id])
+  kind      CutOutputKind @default(PIECE)
+  qty       Decimal       @db.Decimal(18, 3)
+  lengthFt  Decimal?      @db.Decimal(10, 2)  // optional per-unit length (used to split cost)
+  unitCost  Decimal       @db.Decimal(18, 2)  // allocated cost per output unit
 }
 
 

@@ -19,6 +19,7 @@ import permissionRoutes from "./routes/permissions.routes";
 import importRoutes from "./routes/import.routes";
 import purchaseRoutes from "./routes/purchases.routes";
 import stockRoutes from "./routes/stock.routes";
+import cuttingJobRoutes from "./routes/cutting-jobs.routes";
 import paymentMethodRoutes from "./routes/payment-methods.routes";
 import saleRoutes from "./routes/sales.routes";
 import accountRoutes from "./routes/accounts.routes";
@@ -81,6 +82,7 @@ app.use("/api/v1/permissions", permissionRoutes);// Phase 1 (A2 foundation)
 app.use("/api/v1/import", importRoutes);          // Phase 1 (A3 + G7)
 app.use("/api/v1/purchases", purchaseRoutes);    // Phase 2
 app.use("/api/v1/stock", stockRoutes);           // Phase 2
+app.use("/api/v1/cutting-jobs", cuttingJobRoutes); // C6 (rod/pipe cutting & offcut tracking)
 app.use("/api/v1/payment-methods", paymentMethodRoutes); // Phase 2 (read-only list)
 app.use("/api/v1/sales", saleRoutes);            // Phase 3
 app.use("/api/v1/accounts", accountRoutes);      // Phase 4 (G1 accounts, transfers, capital)
