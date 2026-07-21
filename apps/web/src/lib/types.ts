@@ -69,9 +69,31 @@ export type Product = {
   width: string | null;
   height: string | null;
   weight: string | null;
+  // Weight calculator profile (C1)
+  weightCalc?: WeightCalc;
+  diameterMm?: string | null;
+  thicknessMm?: string | null;
+  sheetWidthFt?: string | null;
+  pieceLengthFt?: string | null;
+  densityKgM3?: string | null;
   isActive: boolean;
   images: ProductImage[];
   comboItems?: ComboItemView[];
+};
+
+// C1 — rod/sheet weight calculator
+export type WeightCalc = "NONE" | "ROD" | "SHEET";
+export type WeightCalcResult = {
+  calcType: "ROD" | "SHEET";
+  density: number;
+  pieces: number;
+  totalLengthFt: number;
+  totalLengthM: number;
+  weightPerFtKg: number;
+  weightPerPieceKg: number;
+  weightKg: number;
+  weightTon: number;
+  areaSqft: number;
 };
 
 export type Customer = {

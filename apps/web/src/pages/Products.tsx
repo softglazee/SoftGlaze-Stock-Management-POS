@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { Plus, Pencil, Trash2, Package, Upload, Download, Search, X } from "lucide-react";
 import { api, ApiError, download } from "../lib/api";
-import { Product, Category, Unit, Brand, Paged, ProductType } from "../lib/types";
+import { Product, Category, Unit, Brand, Paged, ProductType, WeightCalc } from "../lib/types";
 import { num, fmtMoney, fmtQty } from "../lib/format";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -40,6 +40,12 @@ type FormState = {
   width: string;
   height: string;
   weight: string;
+  weightCalc: WeightCalc;
+  diameterMm: string;
+  thicknessMm: string;
+  sheetWidthFt: string;
+  pieceLengthFt: string;
+  densityKgM3: string;
 };
 const emptyForm: FormState = {
   name: "",
@@ -60,6 +66,12 @@ const emptyForm: FormState = {
   width: "",
   height: "",
   weight: "",
+  weightCalc: "NONE",
+  diameterMm: "",
+  thicknessMm: "",
+  sheetWidthFt: "",
+  pieceLengthFt: "",
+  densityKgM3: "",
 };
 
 function stockCell(p: Product) {
@@ -198,6 +210,12 @@ export default function Products() {
       width: p.width === null ? "" : String(num(p.width)),
       height: p.height === null ? "" : String(num(p.height)),
       weight: p.weight === null ? "" : String(num(p.weight)),
+      weightCalc: p.weightCalc ?? "NONE",
+      diameterMm: p.diameterMm == null ? "" : String(num(p.diameterMm)),
+      thicknessMm: p.thicknessMm == null ? "" : String(num(p.thicknessMm)),
+      sheetWidthFt: p.sheetWidthFt == null ? "" : String(num(p.sheetWidthFt)),
+      pieceLengthFt: p.pieceLengthFt == null ? "" : String(num(p.pieceLengthFt)),
+      densityKgM3: p.densityKgM3 == null ? "" : String(num(p.densityKgM3)),
     });
     setComboItems(
       (p.comboItems ?? []).map((c) => ({
@@ -241,6 +259,12 @@ export default function Products() {
       width: dimOrNull(form.width),
       height: dimOrNull(form.height),
       weight: dimOrNull(form.weight),
+      weightCalc: form.weightCalc,
+      diameterMm: form.weightCalc === "ROD" ? dimOrNull(form.diameterMm) : null,
+      thicknessMm: form.weightCalc === "SHEET" ? dimOrNull(form.thicknessMm) : null,
+      sheetWidthFt: form.weightCalc === "SHEET" ? dimOrNull(form.sheetWidthFt) : null,
+      pieceLengthFt: form.weightCalc === "NONE" ? null : dimOrNull(form.pieceLengthFt),
+      densityKgM3: form.weightCalc === "NONE" ? null : dimOrNull(form.densityKgM3),
     };
     if (form.type === "COMBO") {
       if (comboItems.length === 0) {
@@ -518,6 +542,42 @@ export default function Products() {
               <div><label className="label">Weight</label><input className="input mono" type="number" step="any" min="0" value={form.weight} onChange={(e) => setForm({ ...form, weight: e.target.value })} /></div>
             </div>
           </details>
+
+          {/* Weight calculator profile (C1) — sariya/sheet sold by weight */}
+          {form.type !== "SERVICE" && (
+            <details className="rounded-lg border border-edge px-3 py-2" open={form.weightCalc !== "NONE"}>
+              <summary className="text-sm text-muted cursor-pointer">Weight profile — rods & sheets (optional)</summary>
+              <div className="mt-3 space-y-3">
+                <p className="text-xs text-muted">Turn on for steel sold by weight. The POS then shows a ⚖ button that fills the qty from diameter/thickness × length.</p>
+                <div>
+                  <label className="label">Calculator</label>
+                  <select className="input" value={form.weightCalc} onChange={(e) => setForm({ ...form, weightCalc: e.target.value as WeightCalc })}>
+                    <option value="NONE">Off (plain product)</option>
+                    <option value="ROD">Round bar / rod — by diameter (sariya)</option>
+                    <option value="SHEET">Sheet / plate — by thickness</option>
+                  </select>
+                </div>
+                {form.weightCalc === "ROD" && (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    <div><label className="label">Diameter (mm)</label><input className="input mono" type="number" step="any" min="0" value={form.diameterMm} onChange={(e) => setForm({ ...form, diameterMm: e.target.value })} placeholder="12" /></div>
+                    <div><label className="label">Std length / pc (ft)</label><input className="input mono" type="number" step="any" min="0" value={form.pieceLengthFt} onChange={(e) => setForm({ ...form, pieceLengthFt: e.target.value })} placeholder="40" /></div>
+                    <div><label className="label">Density (kg/m³)</label><input className="input mono" type="number" step="any" min="0" value={form.densityKgM3} onChange={(e) => setForm({ ...form, densityKgM3: e.target.value })} placeholder="7850" /></div>
+                  </div>
+                )}
+                {form.weightCalc === "SHEET" && (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div><label className="label">Thickness (mm)</label><input className="input mono" type="number" step="any" min="0" value={form.thicknessMm} onChange={(e) => setForm({ ...form, thicknessMm: e.target.value })} placeholder="3" /></div>
+                    <div><label className="label">Width (ft)</label><input className="input mono" type="number" step="any" min="0" value={form.sheetWidthFt} onChange={(e) => setForm({ ...form, sheetWidthFt: e.target.value })} placeholder="4" /></div>
+                    <div><label className="label">Std length / pc (ft)</label><input className="input mono" type="number" step="any" min="0" value={form.pieceLengthFt} onChange={(e) => setForm({ ...form, pieceLengthFt: e.target.value })} placeholder="8" /></div>
+                    <div><label className="label">Density (kg/m³)</label><input className="input mono" type="number" step="any" min="0" value={form.densityKgM3} onChange={(e) => setForm({ ...form, densityKgM3: e.target.value })} placeholder="7850" /></div>
+                  </div>
+                )}
+                {form.weightCalc !== "NONE" && (
+                  <p className="text-xs text-muted">Tip: price this product per <b>kg</b> or <b>ton</b> (set its unit accordingly) so the calculator's weight becomes the sale qty automatically.</p>
+                )}
+              </div>
+            </details>
+          )}
 
           <div className="sm:col-span-2">
             <label className="label">Description (optional)</label>

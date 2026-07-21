@@ -36,9 +36,16 @@ Owner approved a 36-feature batch (`docs/13-FEATURE-BATCH-PLAN.md`, beyond docs/
 
 **Also:** POS product panel now lists the full active catalog by default (search filters it) instead of blank-until-search — commit `13e0a9e`.
 
-**Commits: … A5 c0266e2 · POS 13e0a9e · day-close next. Batch B done → next C1 (rod weight/length calculator).**
+**Commits: … A5 c0266e2 · POS 13e0a9e · day-close 0d9df3e. Batch B done.**
 
-**Next:** C1 — rod/sheet weight & length calculator (sell sariya by ft/kg/ton with per-mm weight math).
+**C1 — Rod/sheet weight & length calculator (DONE). ✅ Batch C started.** Sell steel by piece/length but price by weight — the calculator turns diameter/thickness × length (or pieces × standard length) into kg/ton so staff stop doing the math by hand. **Pure calculator: it writes NOTHING to the ledgers — it only fills a sale-line's qty — so it has zero accounting effect and integrity is untouched.**
+- Schema: `WeightCalc` enum (NONE/ROD/SHEET) + Product profile fields `diameterMm`/`thicknessMm`/`sheetWidthFt`/`pieceLengthFt`/`densityKgM3` (all nullable; density null → steel 7850). Migration `20260721043746_c1_weight_calc` (additive; real DB migrated, integrity still ₨0).
+- Server: `lib/weight.ts` pure math — ROD `weight = π/4·(d_m)²·L·ρ` (steel kg/m ≈ d²/162.28), SHEET `L·W·t·ρ`, `qtyForUnit()` maps the result onto the product's unit (kg/ton/ft/pcs/sqft, else kg-with-flag). `tools.routes.ts` → `POST /api/v1/tools/weight-calc` (stateless, requireAuth). `products.routes` create/update now accept+persist the profile.
+- Web: `lib/weight.ts` client mirror (instant UI); `WeightCalcPanel` reusable component (rod/sheet toggle, live breakdown, optional "set line qty" action); **POS** ⚖ button on weight-profiled cart lines → modal → applies qty; standalone **Weight Calc** page (Inventory nav, Scale icon) with product-prefill search; Products form "Weight profile" section; `WeightCalc`/`WeightCalcResult` types + Product fields.
+- **Verified (throwaway DB `softglaze_e2e`, dropped):** 22/22 — profile persists on create; ROD 12mm×10pc×40ft = 108.24 kg (0.2706 kg/ft, 0.1082 t); lengthFt overrides pieces; SHEET 3mm 4ft×8ft = 70.01 kg / 32 sqft; density 2700 scales; validation rejects ROD w/o diameter; unknown unit → assumedKg; integrity all-green + balance sheet ₨0. Both apps tsc clean.
+- **Real DB:** PATCHed 4 sariya products (12/16/20mm + sample) to ROD ⌀ + 40ft/pc so the ⚖ button is testable live; integrity still all-green ₨0.
+
+**Next:** C2 — landed-cost allocation (distribute freight/duty across purchase items into unit cost; accounting-sensitive — weighted-avg cost must stay exact).
 
 ---
 

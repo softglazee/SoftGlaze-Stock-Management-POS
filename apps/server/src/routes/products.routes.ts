@@ -39,6 +39,13 @@ const createSchema = z.object({
   width: dim,
   height: dim,
   weight: dim,
+  // Weight calculator profile (C1) — rods/sheets sold by weight
+  weightCalc: z.enum(["NONE", "ROD", "SHEET"]).optional(),
+  diameterMm: dim,
+  thicknessMm: dim,
+  sheetWidthFt: dim,
+  pieceLengthFt: dim,
+  densityKgM3: dim,
   openingStock: qty.default(0), // creates an OPENING stock movement (STANDARD only)
   comboItems: z.array(comboItemSchema).max(50).optional(), // G3 combo components
 });
@@ -239,6 +246,12 @@ router.post("/", requireRole(...WRITE_ROLES), async (req, res, next) => {
           width: body.width ?? null,
           height: body.height ?? null,
           weight: body.weight ?? null,
+          weightCalc: body.weightCalc ?? "NONE",
+          diameterMm: body.diameterMm ?? null,
+          thicknessMm: body.thicknessMm ?? null,
+          sheetWidthFt: body.sheetWidthFt ?? null,
+          pieceLengthFt: body.pieceLengthFt ?? null,
+          densityKgM3: body.densityKgM3 ?? null,
           stockQty: openingStock,
         },
       });
@@ -334,6 +347,12 @@ router.patch("/:id", requireRole(...WRITE_ROLES), async (req, res, next) => {
           width: body.width === undefined ? undefined : body.width,
           height: body.height === undefined ? undefined : body.height,
           weight: body.weight === undefined ? undefined : body.weight,
+          weightCalc: body.weightCalc === undefined ? undefined : body.weightCalc,
+          diameterMm: body.diameterMm === undefined ? undefined : body.diameterMm,
+          thicknessMm: body.thicknessMm === undefined ? undefined : body.thicknessMm,
+          sheetWidthFt: body.sheetWidthFt === undefined ? undefined : body.sheetWidthFt,
+          pieceLengthFt: body.pieceLengthFt === undefined ? undefined : body.pieceLengthFt,
+          densityKgM3: body.densityKgM3 === undefined ? undefined : body.densityKgM3,
           isActive: body.isActive,
         },
       });

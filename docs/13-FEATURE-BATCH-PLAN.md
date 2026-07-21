@@ -96,5 +96,6 @@ Effort key: **S** ≈ half-day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
 - [x] **A4 Promise-to-pay tracking** — DONE (migration `a4_payment_promises`; Promises page + PROMISE_DUE bell; 12/12 checks).
 - [x] **A5 Round-off setting** — DONE (migration `a5_sale_roundoff`; `Sale.roundOff` folds into grandTotal; integrity invariant updated; 13/13 checks). **✅ Batch A COMPLETE.**
 - [x] **B1 Cash denomination counter** + **B2 Day-close / Z-report** — DONE as one module (migration `b_day_close`; `DayClose` model + Day Close page + 80mm Z-report; 11/11 checks; posts nothing → integrity-safe).
-- [ ] C1 Rod/sheet weight & length calculator — **next**
-- [ ] C2 … (remaining, in the order above)
+- [x] **C1 Rod/sheet weight & length calculator** — DONE (migration `c1_weight_calc`; `WeightCalc` enum + Product weight-profile fields; `lib/weight.ts` pure math + `POST /tools/weight-calc`; POS ⚖ line button + standalone Weight Calc page + Products weight-profile section; 22/22 checks; pure calculator → zero accounting effect; 4 real-DB sariya products profiled for testing).
+- [ ] C2 Landed-cost allocation — **next**
+- [ ] C3 … (remaining, in the order above)

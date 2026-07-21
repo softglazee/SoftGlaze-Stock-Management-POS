@@ -12,6 +12,7 @@ import Products from "./pages/Products";
 import Brands from "./pages/Brands";
 import Purchases from "./pages/Purchases";
 import Stock from "./pages/Stock";
+import WeightCalc from "./pages/WeightCalc";
 import POS from "./pages/POS";
 import Sales from "./pages/Sales";
 import Customers from "./pages/Customers";
@@ -83,6 +84,7 @@ export default function App() {
         <Route path="/units" element={<Units />} />
         <Route path="/purchases" element={<Purchases />} />
         <Route path="/stock" element={<Stock />} />
+        <Route path="/weight-calc" element={<WeightCalc />} />
         <Route path="/customers" element={<Customers />} />
         <Route path="/price-groups" element={<PriceGroups />} />
         <Route path="/vendors" element={<Vendors />} />

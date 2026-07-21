@@ -1,18 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Search, X, Plus, Trash2, UserPlus, ArrowLeft, Pause, FileText, CheckCircle2, Printer, Package } from "lucide-react";
+import { Search, X, Plus, Trash2, UserPlus, ArrowLeft, Pause, FileText, CheckCircle2, Printer, Package, Scale } from "lucide-react";
 import { api, ApiError } from "../lib/api";
-import { Product, Customer, PaymentMethod, Sale } from "../lib/types";
+import { Product, Customer, PaymentMethod, Sale, WeightCalc } from "../lib/types";
 import { num, fmtMoney, fmtQty } from "../lib/format";
 import { useAuth } from "../context/AuthContext";
 import { useToast, Modal, Badge } from "../components/ui";
 import ThemeToggle from "../components/ThemeToggle";
 import Calculator from "../components/Calculator";
+import WeightCalcPanel, { type WeightProfile } from "../components/WeightCalcPanel";
 import { printReceipt } from "../lib/receipt";
 import { waLink as buildWaLink } from "../lib/phone";
 
-type Line = { productId: string; name: string; sku: string; type: Product["type"]; unitShort: string; qty: string; unitPrice: string; discount: string; stock: number };
+type Line = { productId: string; name: string; sku: string; type: Product["type"]; unitShort: string; qty: string; unitPrice: string; discount: string; stock: number; calc: (WeightProfile & { weightCalc: WeightCalc }) | null };
 type PayRow = { methodId: string; amount: string };
 type SelCustomer = { id: string; name: string; phone: string | null; balance: string; creditLimit: string } | null;
 
@@ -36,6 +37,7 @@ export default function POS() {
   const [showHeld, setShowHeld] = useState(false);
   const [showQuotes, setShowQuotes] = useState(false);
   const [quickAdd, setQuickAdd] = useState<{ name: string; phone: string } | null>(null);
+  const [calcLine, setCalcLine] = useState<number | null>(null); // C1 — which cart line has the weight calculator open
   const searchRef = useRef<HTMLInputElement>(null);
 
   const { data: settings } = useQuery({ queryKey: ["settings"], queryFn: () => api<{ settings: Record<string, string> }>("/settings") });
@@ -75,7 +77,10 @@ export default function POS() {
     setCart((c) => {
       const found = c.find((l) => l.productId === p.id);
       if (found) return c.map((l) => (l.productId === p.id ? { ...l, qty: String((Number(l.qty) || 0) + 1) } : l));
-      return [...c, { productId: p.id, name: p.name, sku: p.sku, type: p.type, unitShort: p.unit?.shortName ?? "", qty: "1", unitPrice: String(num(p.salePrice)), discount: "0", stock: num(p.stockQty) }];
+      const calc = p.weightCalc && p.weightCalc !== "NONE"
+        ? { weightCalc: p.weightCalc, diameterMm: p.diameterMm, thicknessMm: p.thicknessMm, sheetWidthFt: p.sheetWidthFt, pieceLengthFt: p.pieceLengthFt, densityKgM3: p.densityKgM3 }
+        : null;
+      return [...c, { productId: p.id, name: p.name, sku: p.sku, type: p.type, unitShort: p.unit?.shortName ?? "", qty: "1", unitPrice: String(num(p.salePrice)), discount: "0", stock: num(p.stockQty), calc }];
     });
     searchRef.current?.focus();
   }
@@ -207,6 +212,11 @@ export default function POS() {
                         <div className="mono text-muted text-xs">{l.sku}{l.type !== "STANDARD" && ` · ${l.type.toLowerCase()}`}{l.type === "STANDARD" && num(l.qty) > l.stock && <span className="text-danger"> · only {l.stock} in stock</span>}</div>
                         <div className="flex items-center gap-1.5 mt-1">
                           <input className="input mono !py-1 !w-16 text-right" type="number" step="any" min="0" value={l.qty} onChange={(e) => setLine(i, { qty: e.target.value })} aria-label="Qty" />
+                          {l.calc && (
+                            <button type="button" className="text-accent hover:text-accent/80 shrink-0" onClick={() => setCalcLine(i)} title="Weight calculator — fill qty from size">
+                              <Scale size={15} />
+                            </button>
+                          )}
                           <span className="text-muted text-xs">{l.unitShort} ×</span>
                           <input className="input mono !py-1 !w-24 text-right" type="number" step="0.01" min="0" value={l.unitPrice} readOnly={!canEditPrice} onChange={(e) => setLine(i, { unitPrice: e.target.value })} aria-label="Unit price" title={canEditPrice ? "" : "Price editing needs permission"} />
                           <span className="text-muted text-xs" title="Discount on this item">− </span>
@@ -277,12 +287,21 @@ export default function POS() {
       {showHeld && <ParkedTray kind="held" onClose={() => setShowHeld(false)} onResume={(s) => { loadSale(s); setShowHeld(false); }} />}
       {showQuotes && <ParkedTray kind="quotations" onClose={() => setShowQuotes(false)} onResume={(s) => { loadSale(s); setShowQuotes(false); }} />}
       {quickAdd && <QuickAddCustomer form={quickAdd} onClose={() => setQuickAdd(null)} onCreated={(c) => { setCustomer(c); setQuickAdd(null); }} />}
+      {calcLine !== null && cart[calcLine]?.calc && (
+        <Modal open onClose={() => setCalcLine(null)} title={`Weight calculator — ${cart[calcLine].name}`}>
+          <WeightCalcPanel
+            profile={cart[calcLine].calc!}
+            applyUnit={cart[calcLine].unitShort}
+            onApply={(qty) => { setLine(calcLine, { qty: String(qty) }); setCalcLine(null); toast(`Qty set to ${fmtQty(qty)} ${cart[calcLine!].unitShort}`); }}
+          />
+        </Modal>
+      )}
       <Calculator />
     </div>
   );
 
   function loadSale(s: Sale) {
-    setCart(s.items.map((it) => ({ productId: it.productId, name: it.product?.name ?? "", sku: it.product?.sku ?? "", type: it.product?.type ?? "STANDARD", unitShort: it.product?.unit?.shortName ?? "", qty: String(num(it.qty)), unitPrice: String(num(it.unitPrice)), discount: String(num(it.discount)), stock: 0 })));
+    setCart(s.items.map((it) => ({ productId: it.productId, name: it.product?.name ?? "", sku: it.product?.sku ?? "", type: it.product?.type ?? "STANDARD", unitShort: it.product?.unit?.shortName ?? "", qty: String(num(it.qty)), unitPrice: String(num(it.unitPrice)), discount: String(num(it.discount)), stock: 0, calc: null })));
     setCustomer(s.customer ? { id: s.customer.id, name: s.customer.name, phone: s.customer.phone, balance: "0", creditLimit: "0" } : null);
     setBillDiscount(String(num(s.discount))); setTax(String(num(s.tax))); setOtherCharges(String(num(s.otherCharges)));
     setPayTouched(false); setPayments([]); setError(null);
