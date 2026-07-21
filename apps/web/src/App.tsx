@@ -20,6 +20,7 @@ import PriceGroups from "./pages/PriceGroups";
 import Accounts from "./pages/Accounts";
 import Payments from "./pages/Payments";
 import Promises from "./pages/Promises";
+import DayClose from "./pages/DayClose";
 import Cheques from "./pages/Cheques";
 import Bookings from "./pages/Bookings";
 import Estimator from "./pages/Estimator";
@@ -88,6 +89,7 @@ export default function App() {
         <Route path="/accounts" element={<Accounts />} />
         <Route path="/payments" element={<Payments />} />
         <Route path="/promises" element={<Promises />} />
+        <Route path="/day-close" element={<DayClose />} />
         <Route path="/cheques" element={<Cheques />} />
         <Route path="/bookings" element={<Bookings />} />
         <Route path="/estimator" element={<Estimator />} />

@@ -208,6 +208,24 @@ export type StockAdjustmentItem = {
   product?: { name: string; sku: string; unit?: { shortName: string } };
   qtyChange: string;
 };
+// B1+B2 — day close / cash count
+export type DayClose = {
+  id: string;
+  refNo: string;
+  businessDate: string;
+  user?: { name: string };
+  openingFloat: string;
+  expectedCash: string;
+  countedCash: string;
+  variance: string;
+  cashIn: string;
+  cashOut: string;
+  denominations: string | null;
+  notes: string | null;
+  createdAt: string;
+};
+export type DayClosePreview = { expectedCash: number; cashIn: number; cashOut: number; suggestedFloat: number; cashAccounts: { id: string; name: string; currentBalance: string }[] };
+
 // A4 — promise-to-pay
 export type PaymentPromise = {
   id: string;

@@ -31,7 +31,14 @@ Owner approved a 36-feature batch (`docs/13-FEATURE-BATCH-PLAN.md`, beyond docs/
 
 **Batch A commits: F6 3bbc607 · A1 ce1511c · A2 ddc6595 · A3 04f20ac · A4 509b5d2 · menu f48bb38 · A5 next.**
 
-**Next:** B1 — cash denomination counter, then B2 day-close / shift Z-report.
+**B1+B2 — Day close (cash counter + Z-report) (DONE).** End-of-day drawer reconciliation. Count the cash by PKR denomination (5000…1) → `countedCash`; the system computes `expectedCash` = Σ cash-account (`isCash`) currentBalance, `variance` = counted − expected (over/short), plus the day's `cashIn`/`cashOut` from cash-account Payments (informational). **Posts NOTHING to the ledgers** — pure record + audit, so integrity is never touched (this was the design choice; over/short is a finding for the owner). `DayClose` model (refNo DCL-, businessDate, openingFloat, expected/counted/variance, cashIn/out, denominations JSON, notes) + User back-relation. `day-close.routes.ts` (`GET /` list, `GET /preview?date=`, `POST /`, `GET /:id`) mounted `/api/v1/day-close`; gated `accounts.view`. Web: **Day Close** page (Money nav, Coins icon) — denomination count grid with live line/counted totals, expected-vs-counted variance banner, history table, printable **80mm Z-report** (`printZReport`, client-side print window). `DayClose`/`DayClosePreview` types. Migration `20260721…_b_day_close`.
+- **Verified (throwaway DB, dropped):** 11/11 — after a ₨5,000 cash sale + ₨500 cash expense: preview expected ₨4,500 / in ₨5,000 / out ₨500; count 4500 → variance 0; count 4450 → variance −50; DCL numbering; integrity all-green. Both apps tsc clean.
+
+**Also:** POS product panel now lists the full active catalog by default (search filters it) instead of blank-until-search — commit `13e0a9e`.
+
+**Commits: … A5 c0266e2 · POS 13e0a9e · day-close next. Batch B done → next C1 (rod weight/length calculator).**
+
+**Next:** C1 — rod/sheet weight & length calculator (sell sariya by ft/kg/ton with per-mm weight math).
 
 ---
 

@@ -27,6 +27,7 @@ import bookingRoutes from "./routes/bookings.routes";
 import estimatorRoutes from "./routes/estimator.routes";
 import ledgerRoutes from "./routes/ledger.routes";
 import promiseRoutes from "./routes/promises.routes";
+import dayCloseRoutes from "./routes/day-close.routes";
 import expenseRoutes from "./routes/expenses.routes";
 import employeeRoutes from "./routes/employees.routes";
 import attendanceRoutes from "./routes/attendance.routes";
@@ -78,6 +79,7 @@ app.use("/api/v1/payment-methods", paymentMethodRoutes); // Phase 2 (read-only l
 app.use("/api/v1/sales", saleRoutes);            // Phase 3
 app.use("/api/v1/accounts", accountRoutes);      // Phase 4 (G1 accounts, transfers, capital)
 app.use("/api/v1/payments", paymentRoutes);      // Phase 4 (customer receipts, vendor payments)
+app.use("/api/v1/day-close", dayCloseRoutes);    // B1+B2 (cash count + day-close / Z-report)
 app.use("/api/v1/cheques", chequeRoutes);        // F1 (post-dated cheque register)
 app.use("/api/v1/deliveries", deliveryRoutes);   // F2 (delivery challans)
 app.use("/api/v1/bookings", bookingRoutes);      // F3 (advance bookings with rate lock)

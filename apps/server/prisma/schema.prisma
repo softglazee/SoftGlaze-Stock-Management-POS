@@ -48,6 +48,7 @@ model User {
   employeeAdvances EmployeeAdvance[]
   leaveApprovals   LeaveRequest[]  @relation("LeaveApprover")
   paymentPromises  PaymentPromise[]
+  dayCloses        DayClose[]
 }
 
 // ─────────────────────────── PERMISSIONS (A2) ───────────────────────────
@@ -986,6 +987,29 @@ model PaymentPromise {
   updatedAt   DateTime      @updatedAt
 
   @@index([status, promiseDate])
+}
+
+// B1+B2 — Day close / shift Z-report. Reconciles the physically-counted cash drawer
+// against the system's cash-account balance for a business day. Pure record + audit —
+// it posts NO accounting entries (the variance is a finding for the owner to act on),
+// so it never affects integrity.
+model DayClose {
+  id            String   @id @default(cuid())
+  refNo         String   @unique               // DCL-0001
+  businessDate  DateTime                        // the day being closed
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  openingFloat  Decimal  @default(0) @db.Decimal(18, 2) // cash carried in (informational)
+  expectedCash  Decimal  @default(0) @db.Decimal(18, 2) // system cash balance at close
+  countedCash   Decimal  @default(0) @db.Decimal(18, 2) // Σ denominations
+  variance      Decimal  @default(0) @db.Decimal(18, 2) // counted − expected (over/short)
+  cashIn        Decimal  @default(0) @db.Decimal(18, 2) // day's cash received (informational)
+  cashOut       Decimal  @default(0) @db.Decimal(18, 2) // day's cash paid out (informational)
+  denominations String?                         // JSON { "5000": 2, "1000": 5, ... }
+  notes         String?
+  createdAt     DateTime @default(now())
+
+  @@index([businessDate])
 }
 
 enum MessageChannel {
