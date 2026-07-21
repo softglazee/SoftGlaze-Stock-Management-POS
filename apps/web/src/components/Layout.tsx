@@ -3,7 +3,7 @@ import { NavLink, Outlet, Navigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   Anvil, LayoutDashboard, ShoppingCart, Package, FolderTree, Truck, Users,
-  Receipt, Wallet, BarChart3, Settings, LogOut, Banknote, IdCard, Ruler, Tag, Boxes, Landmark, UserCog, Menu, X, MessageSquare, UserCircle, ScrollText, CalendarClock, Building2, Tags, HandCoins, Coins, Scale, FileSignature, Route, Scissors,
+  Receipt, Wallet, BarChart3, Settings, LogOut, Banknote, IdCard, Ruler, Tag, Boxes, Landmark, UserCog, Menu, X, MessageSquare, UserCircle, ScrollText, CalendarClock, Building2, Tags, HandCoins, Coins, Scale, FileSignature, Route, Scissors, ClipboardList, QrCode, FileText,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { api, ApiError } from "../lib/api";
@@ -39,6 +39,8 @@ const NAV_GROUPS: { section?: string; items: { to: string; label: string; icon: 
       { to: "/weight-calc", label: "Weight Calc", icon: Scale, roles: ALL },
       { to: "/cutting", label: "Cutting", icon: Scissors, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "ACCOUNTANT"] },
       { to: "/purchases", label: "Purchases", icon: Truck, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "ACCOUNTANT"] },
+      { to: "/purchase-orders", label: "Purchase Orders", icon: ClipboardList, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "ACCOUNTANT"] },
+      { to: "/labels", label: "Print Labels", icon: QrCode, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER"] },
       { to: "/categories", label: "Categories", icon: FolderTree, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER"] },
       { to: "/brands", label: "Brands", icon: Tag, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER"] },
       { to: "/units", label: "Units", icon: Ruler, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER"] },
@@ -49,6 +51,7 @@ const NAV_GROUPS: { section?: string; items: { to: string; label: string; icon: 
     items: [
       { to: "/customers", label: "Customers", icon: Users, roles: ALL },
       { to: "/vendors", label: "Vendors", icon: Truck, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "ACCOUNTANT"] },
+      { to: "/vendor-notes", label: "Vendor Notes", icon: FileText, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER"] },
       { to: "/price-groups", label: "Price Groups", icon: Tags, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER"] },
       { to: "/rate-contracts", label: "Rate Contracts", icon: FileSignature, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER"] },
       { to: "/employees", label: "Employees", icon: IdCard, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER"] },

@@ -7,6 +7,7 @@ import { requirePermission } from "../middleware/permission";
 import { nextNumber } from "../utils/counter";
 import { applyMovement, weightedAvg, InsufficientStockError } from "../lib/stock";
 import { postPayment } from "../lib/accounts";
+import { logPriceChange } from "../lib/price-history";
 
 const router = Router();
 router.use(requireAuth);
@@ -197,10 +198,12 @@ router.post("/", requirePermission("purchases.create"), async (req, res, next) =
           },
         });
         // weighted-average cost (read fresh in-tx so repeated products chain correctly)
-        const cur = await tx.product.findUnique({ where: { id: line.productId }, select: { stockQty: true, costPrice: true } });
+        const cur = await tx.product.findUnique({ where: { id: line.productId }, select: { stockQty: true, costPrice: true, salePrice: true } });
         const newAvg = weightedAvg(cur!.stockQty, cur!.costPrice, line.qty, capitalisedCost);
         await tx.product.update({ where: { id: line.productId }, data: { costPrice: newAvg } });
         await applyMovement(tx, { productId: line.productId, type: "PURCHASE", qty: line.qty, unitCost: money(capitalisedCost), refType: "PURCHASE", refId: created.id, notes: `Purchase ${invoiceNo}` });
+        // D1 — record the new weighted-avg cost if it moved
+        if (!newAvg.equals(cur!.costPrice)) await logPriceChange(tx, { productId: line.productId, costPrice: newAvg, salePrice: cur!.salePrice, source: "PURCHASE", userId: req.user!.id, note: invoiceNo });
       }
 
       // Vendor payable increases by the unpaid portion

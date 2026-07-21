@@ -18,6 +18,8 @@ import brandRoutes from "./routes/brands.routes";
 import permissionRoutes from "./routes/permissions.routes";
 import importRoutes from "./routes/import.routes";
 import purchaseRoutes from "./routes/purchases.routes";
+import purchaseOrderRoutes from "./routes/purchase-orders.routes";
+import vendorNoteRoutes from "./routes/vendor-notes.routes";
 import stockRoutes from "./routes/stock.routes";
 import cuttingJobRoutes from "./routes/cutting-jobs.routes";
 import paymentMethodRoutes from "./routes/payment-methods.routes";
@@ -81,6 +83,8 @@ app.use("/api/v1/brands", brandRoutes);          // Phase 1 (G2)
 app.use("/api/v1/permissions", permissionRoutes);// Phase 1 (A2 foundation)
 app.use("/api/v1/import", importRoutes);          // Phase 1 (A3 + G7)
 app.use("/api/v1/purchases", purchaseRoutes);    // Phase 2
+app.use("/api/v1/purchase-orders", purchaseOrderRoutes); // D5 (PO → GRN flow)
+app.use("/api/v1/vendor-notes", vendorNoteRoutes);       // D4 (vendor debit/credit notes)
 app.use("/api/v1/stock", stockRoutes);           // Phase 2
 app.use("/api/v1/cutting-jobs", cuttingJobRoutes); // C6 (rod/pipe cutting & offcut tracking)
 app.use("/api/v1/payment-methods", paymentMethodRoutes); // Phase 2 (read-only list)

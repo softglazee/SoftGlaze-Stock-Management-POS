@@ -196,6 +196,10 @@ router.post("/", requirePermission("sales.create"), async (req, res, next) => {
     const roundTo = Math.max(0, Number(roundToRow?.value || 0));
     const grandTotal = roundTo > 0 ? round2(Math.round(rawTotal / roundTo) * roundTo) : rawTotal;
     const roundOff = round2(grandTotal - rawTotal);
+    // D2 — when the shop allows overselling, stock may go negative (the line is flagged
+    // as a backorder). Off by default → the ledger still blocks over-issue as before.
+    const negRow = await prisma.setting.findUnique({ where: { key: "allow_negative_stock" }, select: { value: true } });
+    const allowNeg = negRow?.value === "1";
     const profit = round2(grandTotal - totalCost);
 
     // ── Hold / quotation: snapshots only, no stock/money movement ──
@@ -255,9 +259,10 @@ router.post("/", requirePermission("sales.create"), async (req, res, next) => {
         },
       });
       for (const c of computed) {
-        await tx.saleItem.create({ data: { saleId: created.id, productId: c.line.productId, qty: new Prisma.Decimal(c.line.qty), unitPrice: money(c.line.unitPrice), unitCost: money(c.unitCost), discount: money(c.line.discount), taxAmount: money(0), total: money(c.total) } });
+        const item = await tx.saleItem.create({ data: { saleId: created.id, productId: c.line.productId, qty: new Prisma.Decimal(c.line.qty), unitPrice: money(c.line.unitPrice), unitCost: money(c.unitCost), discount: money(c.line.discount), taxAmount: money(0), total: money(c.total) } });
         if (c.product.type === "STANDARD") {
-          await applyMovement(tx, { productId: c.product.id, type: "SALE", qty: -c.line.qty, unitCost: money(c.unitCost), refType: "SALE", refId: created.id, notes: `Sale ${invoiceNo}`, productName: c.product.name });
+          const bal = await applyMovement(tx, { productId: c.product.id, type: "SALE", qty: -c.line.qty, unitCost: money(c.unitCost), refType: "SALE", refId: created.id, notes: `Sale ${invoiceNo}`, productName: c.product.name, allowNegative: allowNeg });
+          if (allowNeg && new Prisma.Decimal(bal).lt(0)) await tx.saleItem.update({ where: { id: item.id }, data: { backordered: true } });
         } else if (c.product.type === "COMBO") {
           for (const ci of c.product.comboItems) {
             if (ci.componentProduct.type !== "STANDARD") continue; // only tangible components hold stock

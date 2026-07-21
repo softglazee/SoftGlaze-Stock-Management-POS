@@ -146,15 +146,18 @@ router.get("/integrity", requirePermission("reports.view"), async (_req, res, ne
 
     // 4b. Vendor payables reconcile
     const vendors = await prisma.vendor.findMany({ select: { id: true, name: true, openingBalance: true, balance: true } });
-    const [purCredit, purRetDebit, vendPay] = await Promise.all([
+    const [purCredit, purRetDebit, vendPay, vendNotes] = await Promise.all([
       prisma.purchase.groupBy({ by: ["vendorId"], where: { status: "RECEIVED", isReturn: false }, _sum: { grandTotal: true } }),
       prisma.purchase.groupBy({ by: ["vendorId"], where: { isReturn: true }, _sum: { grandTotal: true } }),
       prisma.payment.groupBy({ by: ["vendorId", "type"], where: { vendorId: { not: null } }, _sum: { amount: true } }),
+      prisma.vendorNote.groupBy({ by: ["vendorId", "type"], _sum: { amount: true } }),
     ]);
     const purCreditMap = new Map(purCredit.map((r) => [r.vendorId, num(r._sum.grandTotal)]));
     const purRetMap = new Map(purRetDebit.map((r) => [r.vendorId, num(r._sum.grandTotal)]));
     const vendPayMap = new Map<string, number>();
     for (const r of vendPay) vendPayMap.set(`${r.vendorId}|${r.type}`, num(r._sum.amount));
+    const vendNoteMap = new Map<string, number>();
+    for (const r of vendNotes) vendNoteMap.set(`${r.vendorId}|${r.type}`, num(r._sum.amount));
     let vendBad = 0;
     let vendFirst = "";
     for (const v of vendors) {
@@ -163,7 +166,9 @@ router.get("/integrity", requirePermission("reports.view"), async (_req, res, ne
       const purPay = vendPayMap.get(`${v.id}|PURCHASE_PAYMENT`) ?? 0;
       const vPay = vendPayMap.get(`${v.id}|VENDOR_PAYMENT`) ?? 0;
       const refundIn = vendPayMap.get(`${v.id}|REFUND_IN`) ?? 0;
-      const derived = r2(num(v.openingBalance) + credit - retDebit - purPay - vPay + refundIn);
+      const debitNote = vendNoteMap.get(`${v.id}|DEBIT`) ?? 0; // raises payable
+      const creditNote = vendNoteMap.get(`${v.id}|CREDIT`) ?? 0; // lowers payable
+      const derived = r2(num(v.openingBalance) + credit - retDebit - purPay - vPay + refundIn + debitNote - creditNote);
       if (derived !== r2(num(v.balance))) {
         vendBad++;
         if (!vendFirst) vendFirst = `${v.name}: balance ${num(v.balance)} vs derived ${derived}`;
@@ -192,7 +197,7 @@ router.get("/integrity", requirePermission("reports.view"), async (_req, res, ne
 // ─────────────────────────── BALANCE SHEET ───────────────────────────
 
 async function computeBalanceSheet() {
-  const [accounts, products, customers, vendors, capital, salesProfit, retProfit, expenseAgg, purAgg, purItems, adjMoves, openAdvAgg] = await Promise.all([
+  const [accounts, products, customers, vendors, capital, salesProfit, retProfit, expenseAgg, purAgg, purItems, adjMoves, openAdvAgg, vendorNotesAgg] = await Promise.all([
     prisma.paymentMethod.findMany({ select: { currentBalance: true } }),
     prisma.product.findMany({ select: { stockQty: true, costPrice: true } }),
     prisma.customer.findMany({ select: { balance: true, openingBalance: true } }),
@@ -205,7 +210,11 @@ async function computeBalanceSheet() {
     prisma.purchaseItem.findMany({ where: { purchase: { status: "RECEIVED", isReturn: false } }, select: { qty: true, unitCost: true, landedUnitCost: true } }),
     prisma.stockMovement.findMany({ where: { type: { in: ["ADJUSTMENT_IN", "ADJUSTMENT_OUT", "DAMAGE"] } }, select: { qty: true, unitCost: true } }),
     prisma.employeeAdvance.aggregate({ _sum: { amount: true }, where: { recoveredInId: null } }),
+    prisma.vendorNote.groupBy({ by: ["type"], _sum: { amount: true } }),
   ]);
+  // D4 — vendor notes: a CREDIT lowers our payable (other income), a DEBIT raises it (cost).
+  // The vendor balances already reflect them; the net flows to retained earnings so Assets = Liab+Equity holds.
+  const vendorNotesNet = r2(num(vendorNotesAgg.find((v) => v.type === "CREDIT")?._sum.amount) - num(vendorNotesAgg.find((v) => v.type === "DEBIT")?._sum.amount));
 
   const cashBank = r2(accounts.reduce((s, a) => s + num(a.currentBalance), 0));
   const stockValue = r2(products.reduce((s, p) => s + num(p.stockQty) * num(p.costPrice), 0));
@@ -250,7 +259,7 @@ async function computeBalanceSheet() {
   const purchaseGap = r2(num(purAgg._sum.grandTotal) - inventoryValueAdded); // un-allocated freight + tax − discounts on bills
   const adjustmentValue = r2(adjMoves.reduce((s, m) => s + num(m.qty) * num(m.unitCost), 0));
   const revaluation = r2(stockValue - flowInventoryValue); // manual cost edits + rounding
-  const retainedEarnings = r2(salesNetProfit - totalExpenses - purchaseGap + adjustmentValue + revaluation);
+  const retainedEarnings = r2(salesNetProfit - totalExpenses - purchaseGap + adjustmentValue + revaluation + vendorNotesNet);
 
   const assetsTotal = r2(cashBank + stockValue + receivables + vendorAdvances + employeeAdvances);
   const liabilitiesTotal = r2(payables + customerAdvances);
@@ -650,6 +659,63 @@ router.get("/stock-movements", requirePermission("reports.view"), async (req, re
       rows,
     };
     return sendReport(res, fmtReq(req), "stock-movements", doc, await loadSettings());
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─────────────────────────── PRICE HISTORY (D1) ───────────────────────────
+
+/** GET /reports/price-history?productId&from&to[&format] — cost/sale price trend for a product. */
+router.get("/price-history", requirePermission("reports.view"), async (req, res, next) => {
+  try {
+    const { from, to, meta } = periodOf(req);
+    const productId = String(req.query.productId ?? "");
+    if (!productId) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: "Pick a product first" } });
+    const product = await prisma.product.findUnique({ where: { id: productId }, select: { name: true, sku: true, costPrice: true, salePrice: true } });
+    if (!product) return res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "Product not found" } });
+    const rows = await prisma.priceHistory.findMany({ where: { productId, createdAt: { gte: from, lte: to } }, orderBy: { createdAt: "asc" }, include: { user: { select: { name: true } } } });
+    const SRC: Record<string, string> = { CREATE: "Created", UPDATE: "Manual edit", PURCHASE: "Purchase (avg cost)" };
+    const mapped = rows.map((r) => ({ date: r.createdAt.toLocaleDateString("en-GB"), source: SRC[r.source] ?? r.source, cost: num(r.costPrice), sale: num(r.salePrice), margin: r2(num(r.salePrice) - num(r.costPrice)), by: r.user?.name ?? (r.note ?? "") }));
+    const doc: ReportDoc = {
+      title: `Price History — ${product.name}`,
+      meta: [{ label: "Product", value: `${product.name} (${product.sku})` }, ...meta],
+      columns: [
+        { header: "Date", key: "date" },
+        { header: "Change", key: "source" },
+        { header: "Cost", key: "cost", align: "right", money: true },
+        { header: "Sale", key: "sale", align: "right", money: true },
+        { header: "Margin", key: "margin", align: "right", money: true },
+        { header: "By / ref", key: "by" },
+      ],
+      rows: mapped,
+    };
+    return sendReport(res, fmtReq(req), "price-history", doc, await loadSettings(), { current: { cost: num(product.costPrice), sale: num(product.salePrice) } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─────────────────────────── BACKORDERS / NEGATIVE STOCK (D2) ───────────────────────────
+
+/** GET /reports/backorders[&format] — products currently oversold (stock below zero). */
+router.get("/backorders", requirePermission("reports.view"), async (req, res, next) => {
+  try {
+    const products = await prisma.product.findMany({ where: { type: "STANDARD", stockQty: { lt: 0 } }, select: { sku: true, name: true, stockQty: true, unit: { select: { shortName: true } } }, orderBy: { stockQty: "asc" } });
+    const rows = products.map((p) => ({ sku: p.sku, name: p.name, short: r2(-num(p.stockQty)), unit: p.unit?.shortName ?? "" }));
+    const doc: ReportDoc = {
+      title: "Backorders (oversold stock)",
+      meta: [{ label: "As of", value: new Date().toLocaleDateString("en-GB") }],
+      columns: [
+        { header: "SKU", key: "sku" },
+        { header: "Product", key: "name" },
+        { header: "Short by", key: "short", align: "right" },
+        { header: "Unit", key: "unit" },
+      ],
+      rows,
+      totals: { sku: "Total", short: r2(rows.reduce((a, r) => a + r.short, 0)) },
+    };
+    return sendReport(res, fmtReq(req), "backorders", doc, await loadSettings());
   } catch (err) {
     next(err);
   }

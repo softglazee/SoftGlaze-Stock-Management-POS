@@ -39,6 +39,7 @@ const EDITABLE_KEYS = [
   "show_logo",
   "receipt_size",
   "round_off_to",
+  "allow_negative_stock", // D2 — allow overselling (stock goes negative, line flagged backorder)
   // Regional
   "currency",
   "currency_symbol",

@@ -28,6 +28,9 @@ import Bookings from "./pages/Bookings";
 import Estimator from "./pages/Estimator";
 import DeliveryTrips from "./pages/DeliveryTrips";
 import Cutting from "./pages/Cutting";
+import PurchaseOrders from "./pages/PurchaseOrders";
+import VendorNotes from "./pages/VendorNotes";
+import Labels from "./pages/Labels";
 import Expenses from "./pages/Expenses";
 import Employees from "./pages/Employees";
 import Reports from "./pages/Reports";
@@ -101,6 +104,9 @@ export default function App() {
         <Route path="/estimator" element={<Estimator />} />
         <Route path="/delivery-trips" element={<DeliveryTrips />} />
         <Route path="/cutting" element={<Cutting />} />
+        <Route path="/purchase-orders" element={<PurchaseOrders />} />
+        <Route path="/vendor-notes" element={<VendorNotes />} />
+        <Route path="/labels" element={<Labels />} />
         <Route path="/expenses" element={<Expenses />} />
         <Route path="/employees" element={<Employees />} />
         <Route path="/reports" element={<Reports />} />

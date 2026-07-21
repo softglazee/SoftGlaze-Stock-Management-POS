@@ -51,6 +51,9 @@ model User {
   dayCloses        DayClose[]
   deliveryTrips    DeliveryTrip[]
   cuttingJobs      CuttingJob[]
+  priceLogs        PriceHistory[]
+  vendorNotes      VendorNote[]
+  purchaseOrders   PurchaseOrder[]
 }
 
 // ─────────────────────────── PERMISSIONS (A2) ───────────────────────────
@@ -183,6 +186,8 @@ model Product {
   rateContractItems RateContractItem[]
   cutSources     CuttingJob[]    @relation("CutSource")  // C6 — bars cut FROM this product
   cutOutputs     CuttingOutput[] @relation("CutOutput")  // C6 — pieces/offcuts cut INTO this product
+  priceHistory   PriceHistory[]       // D1 — cost/sale price change log
+  poItems        PurchaseOrderItem[]  // D5 — purchase-order lines
 
   @@index([name])
   @@index([categoryId])
@@ -341,6 +346,8 @@ model Vendor {
   purchases Purchase[]
   payments  Payment[]
   cheques   Cheque[]
+  notes          VendorNote[]     // D4 — debit/credit notes
+  purchaseOrders PurchaseOrder[]  // D5 — purchase orders
 
   @@index([name])
 }
@@ -378,6 +385,8 @@ model Purchase {
   notes        String?
   isReturn     Boolean        @default(false) // purchase return document
   returnOfId   String?                         // original purchase if return
+  purchaseOrderId String?                      // D5 — the PO this receipt was booked against
+  purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
   createdAt    DateTime       @default(now())
 
   items        PurchaseItem[]
@@ -398,6 +407,94 @@ model PurchaseItem {
   landedUnitCost Decimal? @db.Decimal(18, 2)                 // C2 — unitCost + allocated freight share; the cost capitalised into stock. Null = same as unitCost.
   discount       Decimal  @default(0) @db.Decimal(18, 2)
   total          Decimal  @db.Decimal(18, 2)
+}
+
+// ─────────────────────────── D1 · PRICE HISTORY ───────────────────────────
+// A row is appended whenever a product's cost or sale price changes (on create,
+// on manual edit, and on each purchase's weighted-avg cost update). Read-only —
+// feeds the cost/price trend report. No effect on the ledgers or balance sheet.
+model PriceHistory {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  costPrice Decimal  @db.Decimal(18, 2)
+  salePrice Decimal  @db.Decimal(18, 2)
+  source    String   // "CREATE" | "UPDATE" | "PURCHASE"
+  note      String?
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@index([productId, createdAt])
+}
+
+// ─────────────────────────── D4 · VENDOR DEBIT/CREDIT NOTES ───────────────────────────
+// A formal adjustment to a vendor's balance NOT tied to a purchase or a cash payment
+// (rate correction, allowance, goods returned without a stock document). CREDIT lowers
+// what we owe (income); DEBIT raises it (cost). The counterpart flows to retained
+// earnings so the balance sheet stays exact; the vendor-reconciliation check includes it.
+enum VendorNoteType {
+  CREDIT // vendor credits us → payable DOWN (other income)
+  DEBIT  // we owe more       → payable UP   (extra cost)
+}
+
+model VendorNote {
+  id        String         @id @default(cuid())
+  refNo     String         @unique // VDN-000001
+  vendorId  String
+  vendor    Vendor         @relation(fields: [vendorId], references: [id])
+  type      VendorNoteType
+  amount    Decimal        @db.Decimal(18, 2)
+  reason    String
+  date      DateTime       @default(now())
+  userId    String
+  user      User           @relation(fields: [userId], references: [id])
+  createdAt DateTime       @default(now())
+
+  @@index([vendorId])
+}
+
+// ─────────────────────────── D5 · PURCHASE ORDERS → GRN ───────────────────────────
+// A PO is a NON-financial planning document (no stock, no money). Receiving against it
+// creates a normal Purchase (RECEIVED) for the received qty — reusing the proven
+// purchase posting (stock in + weighted-avg + vendor payable) — and advances the PO's
+// received quantities. Partial receipts supported. The PO itself posts nothing.
+enum PurchaseOrderStatus {
+  DRAFT
+  SENT
+  PARTIAL
+  RECEIVED
+  CLOSED
+  CANCELLED
+}
+
+model PurchaseOrder {
+  id           String              @id @default(cuid())
+  poNo         String              @unique // PO-000001
+  vendorId     String
+  vendor       Vendor              @relation(fields: [vendorId], references: [id])
+  userId       String
+  user         User                @relation(fields: [userId], references: [id])
+  date         DateTime            @default(now())
+  expectedDate DateTime?
+  status       PurchaseOrderStatus @default(DRAFT)
+  notes        String?
+  items        PurchaseOrderItem[]
+  purchases    Purchase[]
+  createdAt    DateTime            @default(now())
+
+  @@index([vendorId])
+}
+
+model PurchaseOrderItem {
+  id          String        @id @default(cuid())
+  poId        String
+  po          PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product       @relation(fields: [productId], references: [id])
+  qty         Decimal       @db.Decimal(18, 3) // ordered
+  qtyReceived Decimal       @default(0) @db.Decimal(18, 3)
+  unitCost    Decimal       @db.Decimal(18, 2) // agreed/expected cost
 }
 
 // ─────────────────────────── SALES / POS ───────────────────────────
@@ -461,6 +558,7 @@ model SaleItem {
   discount  Decimal @default(0) @db.Decimal(18, 2)
   taxAmount Decimal @default(0) @db.Decimal(18, 2)
   total     Decimal @db.Decimal(18, 2)
+  backordered Boolean @default(false)  // D2 — line sold while stock was insufficient (negative-stock allowed)
 
   deliveries DeliveryNoteItem[]
 }

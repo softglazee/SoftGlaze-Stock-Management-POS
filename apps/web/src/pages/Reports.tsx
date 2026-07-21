@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { FileText, Sheet, BarChart3, TrendingUp, Truck, Boxes, Users, Receipt, CreditCard, Activity, IdCard, CalendarClock, CalendarCheck, Tags, PackageMinus } from "lucide-react";
+import { FileText, Sheet, BarChart3, TrendingUp, Truck, Boxes, Users, Receipt, CreditCard, Activity, IdCard, CalendarClock, CalendarCheck, Tags, PackageMinus, LineChart, PackageX } from "lucide-react";
 import { api, download, ApiError } from "../lib/api";
 import { ReportTable } from "../lib/types";
 import { fmtMoney } from "../lib/format";
 import { useAuth } from "../context/AuthContext";
 import { PageHeader, TableSkeleton, EmptyState, useToast } from "../components/ui";
 
-type Cfg = { key: string; label: string; path: string; icon: typeof FileText; period?: boolean; basis?: boolean; filters?: boolean; month?: boolean; perm?: string };
+type Cfg = { key: string; label: string; path: string; icon: typeof FileText; period?: boolean; basis?: boolean; filters?: boolean; month?: boolean; product?: boolean; perm?: string };
 
 const REPORTS: Cfg[] = [
   { key: "profit-loss", label: "Profit & Loss", path: "/reports/profit-loss", icon: TrendingUp, period: true, perm: "reports.profit" },
@@ -17,6 +17,8 @@ const REPORTS: Cfg[] = [
   { key: "margins-by-group", label: "Margins by Price Group", path: "/reports/margins-by-group", icon: Tags, period: true, perm: "reports.profit" },
   { key: "purchases", label: "Purchase Register", path: "/reports/purchases", icon: Truck, period: true },
   { key: "stock-valuation", label: "Stock Valuation", path: "/reports/stock-valuation", icon: Boxes, basis: true },
+  { key: "price-history", label: "Cost / Price History", path: "/reports/price-history", icon: LineChart, period: true, product: true },
+  { key: "backorders", label: "Backorders (oversold)", path: "/reports/backorders", icon: PackageX },
   { key: "receivables", label: "Receivables Aging", path: "/reports/receivables", icon: Users },
   { key: "payables", label: "Payables Aging", path: "/reports/payables", icon: Truck },
   { key: "expenses", label: "Expenses by Category", path: "/reports/expenses", icon: Receipt, period: true },
@@ -69,7 +71,7 @@ function ReportView({ cfg }: { cfg: Cfg }) {
 
   const { data: custs } = useQuery({ queryKey: ["rep-custs"], queryFn: () => api<{ customers: { id: string; name: string }[] }>("/customers?limit=300&status=active"), enabled: !!cfg.filters });
   const { data: cats } = useQuery({ queryKey: ["rep-cats"], queryFn: () => api<{ categories: { id: string; name: string }[] }>("/categories"), enabled: !!cfg.filters });
-  const { data: prods } = useQuery({ queryKey: ["rep-prods"], queryFn: () => api<{ products: { id: string; name: string }[] }>("/products?limit=300"), enabled: !!cfg.filters });
+  const { data: prods } = useQuery({ queryKey: ["rep-prods"], queryFn: () => api<{ products: { id: string; name: string }[] }>("/products?limit=300"), enabled: !!cfg.filters || !!cfg.product });
 
   const qs = new URLSearchParams({
     ...(cfg.period ? { from, to: `${to}T23:59:59` } : {}),
@@ -77,13 +79,15 @@ function ReportView({ cfg }: { cfg: Cfg }) {
     ...(cfg.basis ? { basis } : {}),
     ...(cfg.filters && customerId ? { customerId } : {}),
     ...(cfg.filters && categoryId ? { categoryId } : {}),
-    ...(cfg.filters && productId ? { productId } : {}),
+    ...((cfg.filters || cfg.product) && productId ? { productId } : {}),
   }).toString();
 
+  const needsProduct = !!cfg.product && !productId;
   const { data, isLoading, error } = useQuery({
     queryKey: ["report", cfg.key, qs],
     queryFn: () => api<{ report: ReportTable }>(`${cfg.path}?${qs}`),
     placeholderData: keepPreviousData,
+    enabled: !needsProduct,
   });
   const report = data?.report;
 
@@ -131,13 +135,18 @@ function ReportView({ cfg }: { cfg: Cfg }) {
             <div><label className="label">Product</label><select className="input !w-44" value={productId} onChange={(e) => setProductId(e.target.value)}><option value="">All products</option>{(prods?.products ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
           </>
         )}
+        {cfg.product && (
+          <div><label className="label">Product</label><select className="input !w-56" value={productId} onChange={(e) => setProductId(e.target.value)}><option value="">Choose a product…</option>{(prods?.products ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+        )}
         <div className="flex-1" />
         <button className="btn btn-secondary" onClick={() => dl("pdf")} disabled={!report}><FileText size={15} /> PDF</button>
         <button className="btn btn-secondary" onClick={() => dl("xlsx")} disabled={!report}><Sheet size={15} /> Excel</button>
       </div>
 
       <div className="card overflow-hidden">
-        {isLoading && !report ? (
+        {needsProduct ? (
+          <EmptyState title="Choose a product" hint="Pick a product above to see how its cost and sale price changed over time." />
+        ) : isLoading && !report ? (
           <TableSkeleton cols={5} />
         ) : error ? (
           <EmptyState title="Can't load this report" hint={(error as { message?: string }).message ?? "Please try again"} />

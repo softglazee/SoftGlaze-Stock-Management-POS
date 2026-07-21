@@ -677,3 +677,41 @@ export type CuttingJob = {
   user?: { name: string };
   outputs: CuttingOutput[];
 };
+
+// ── Vendor debit/credit notes (D4) ──
+export type VendorNoteType = "CREDIT" | "DEBIT";
+export type VendorNote = {
+  id: string;
+  refNo: string;
+  vendorId: string;
+  vendor?: { id: string; code: string; name: string };
+  type: VendorNoteType;
+  amount: string;
+  reason: string;
+  date: string;
+  user?: { name: string };
+};
+
+// ── Purchase orders → GRN (D5) ──
+export type PurchaseOrderStatus = "DRAFT" | "SENT" | "PARTIAL" | "RECEIVED" | "CLOSED" | "CANCELLED";
+export type PurchaseOrderItem = {
+  id: string;
+  productId: string;
+  product?: { id: string; name: string; sku: string; unit?: { shortName: string } };
+  qty: string;
+  qtyReceived: string;
+  unitCost: string;
+};
+export type PurchaseOrder = {
+  id: string;
+  poNo: string;
+  vendorId: string;
+  vendor?: { id: string; code: string; name: string };
+  user?: { name: string };
+  date: string;
+  expectedDate: string | null;
+  status: PurchaseOrderStatus;
+  notes: string | null;
+  items: PurchaseOrderItem[];
+  purchases: { id: string; invoiceNo: string; date: string; grandTotal: string }[];
+};

@@ -5,6 +5,7 @@ import { prisma } from "../lib/prisma";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { imageUpload, saveImage, deleteImageFiles } from "../lib/upload";
 import { nextSku } from "../utils/sku";
+import { logPriceChange } from "../lib/price-history";
 
 const router = Router();
 router.use(requireAuth);
@@ -273,6 +274,7 @@ router.post("/", requireRole(...WRITE_ROLES), async (req, res, next) => {
           data: comboItems.map((c) => ({ comboProductId: created.id, componentProductId: c.componentProductId, qty: c.qty })),
         });
       }
+      await logPriceChange(tx, { productId: created.id, costPrice: body.costPrice, salePrice: body.salePrice, source: "CREATE", userId: req.user!.id });
       await tx.auditLog.create({
         data: { userId: req.user!.id, action: "CREATE_PRODUCT", entity: "Product", entityId: created.id, details: `${sku} ${created.name}` },
       });
@@ -364,6 +366,10 @@ router.patch("/:id", requireRole(...WRITE_ROLES), async (req, res, next) => {
         await tx.comboItem.createMany({
           data: body.comboItems!.map((c) => ({ comboProductId: existing.id, componentProductId: c.componentProductId, qty: c.qty })),
         });
+      }
+      // D1 — log the price snapshot only when cost or sale price actually changed.
+      if (!new Prisma.Decimal(updated.costPrice).equals(existing.costPrice) || !new Prisma.Decimal(updated.salePrice).equals(existing.salePrice)) {
+        await logPriceChange(tx, { productId: updated.id, costPrice: updated.costPrice, salePrice: updated.salePrice, source: "UPDATE", userId: req.user!.id });
       }
       await tx.auditLog.create({
         data: { userId: req.user!.id, action: "UPDATE_PRODUCT", entity: "Product", entityId: updated.id, details: `${updated.sku} ${updated.name}` },
