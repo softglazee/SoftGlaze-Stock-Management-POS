@@ -16,7 +16,7 @@ const router = Router();
 router.use(requireAuth);
 
 const ASSIGNABLE = ["ADMIN", "MANAGER", "CASHIER", "ACCOUNTANT"] as const;
-const select = { id: true, name: true, email: true, phone: true, role: true, isActive: true, createdAt: true } satisfies Prisma.UserSelect;
+const select = { id: true, name: true, email: true, phone: true, role: true, isActive: true, commissionPercent: true, createdAt: true } satisfies Prisma.UserSelect;
 
 /** GET /users */
 router.get("/", requirePermission("users.manage"), async (req, res, next) => {
@@ -69,6 +69,7 @@ const createSchema = z.object({
   password: z.string().min(8, "Password must be at least 8 characters"),
   phone: z.string().trim().max(25).nullable().optional(),
   role: z.enum(ASSIGNABLE),
+  commissionPercent: z.coerce.number().min(0).max(100).optional(), // F3
 });
 
 /** POST /users — create a staff account */
@@ -79,7 +80,7 @@ router.post("/", requirePermission("users.manage"), async (req, res, next) => {
       return res.status(403).json({ ok: false, error: { code: "FORBIDDEN", message: "Only the owner can create an Admin" } });
     }
     const passwordHash = await bcrypt.hash(body.password, 12);
-    const user = await prisma.user.create({ data: { name: body.name, email: body.email.toLowerCase(), phone: body.phone || null, role: body.role, passwordHash }, select });
+    const user = await prisma.user.create({ data: { name: body.name, email: body.email.toLowerCase(), phone: body.phone || null, role: body.role, passwordHash, commissionPercent: body.commissionPercent ?? 0 }, select });
     await prisma.auditLog.create({ data: { userId: req.user!.id, action: "CREATE_USER", entity: "User", entityId: user.id, details: `${user.name} · ${user.role}` } });
     res.status(201).json({ ok: true, data: { user } });
   } catch (err: any) {
@@ -94,6 +95,7 @@ const updateSchema = z.object({
   phone: z.string().trim().max(25).nullable().optional(),
   role: z.enum(ASSIGNABLE).optional(),
   isActive: z.boolean().optional(),
+  commissionPercent: z.coerce.number().min(0).max(100).optional(), // F3
 });
 
 /** PATCH /users/:id */
@@ -113,7 +115,7 @@ router.patch("/:id", requirePermission("users.manage"), async (req, res, next) =
     }
     const user = await prisma.user.update({
       where: { id: target.id },
-      data: { name: body.name, phone: body.phone === undefined ? undefined : body.phone || null, role: body.role, isActive: body.isActive, ...(body.isActive === false ? { refreshToken: null } : {}) },
+      data: { name: body.name, phone: body.phone === undefined ? undefined : body.phone || null, role: body.role, isActive: body.isActive, commissionPercent: body.commissionPercent, ...(body.isActive === false ? { refreshToken: null } : {}) },
       select,
     });
     await prisma.auditLog.create({ data: { userId: req.user!.id, action: "UPDATE_USER", entity: "User", entityId: user.id, details: `${user.name} · ${user.role}${user.isActive ? "" : " · disabled"}` } });

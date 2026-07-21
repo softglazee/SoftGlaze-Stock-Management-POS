@@ -860,6 +860,81 @@ router.get("/salaries", requirePermission("reports.view"), async (req, res, next
   }
 });
 
+// ─────────────────────────── PAYSLIP (F1) ───────────────────────────
+
+/** GET /reports/payslip?salaryId[&format] — a payslip for one salary payment. */
+router.get("/payslip", requirePermission("reports.view"), async (req, res, next) => {
+  try {
+    const salaryId = String(req.query.salaryId ?? "");
+    const pay = await prisma.salaryPayment.findUnique({ where: { id: salaryId }, include: { employee: { select: { name: true, code: true, designation: true } } } });
+    if (!pay) return res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "Salary payment not found" } });
+    const earned = r2(num(pay.baseAmount) + num(pay.bonus));
+    const rows = [
+      { label: "Basic salary", amount: num(pay.baseAmount) },
+      { label: "Bonus / allowance", amount: num(pay.bonus) },
+      { label: "Less: Penalty / other deduction", amount: -num(pay.deduction) },
+      { label: "Less: Absent / half-day deduction", amount: -num(pay.absentDeduction) },
+      { label: "Less: Advance recovered", amount: -num(pay.advanceRecovered) },
+    ];
+    const doc: ReportDoc = {
+      title: `Payslip — ${pay.employee.name}`,
+      meta: [
+        { label: "Employee", value: `${pay.employee.name} (${pay.employee.code})` },
+        ...(pay.employee.designation ? [{ label: "Designation", value: pay.employee.designation }] : []),
+        { label: "Month", value: pay.month },
+        { label: "Ref", value: pay.refNo },
+        { label: "Earned wage", value: `₨${earned}` },
+      ],
+      columns: [{ header: "Item", key: "label" }, { header: "Amount", key: "amount", align: "right", money: true }],
+      rows,
+      totals: { label: "Net paid", amount: num(pay.netPaid) },
+    };
+    return sendReport(res, fmtReq(req), `payslip-${pay.refNo}`, doc, await loadSettings());
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─────────────────────────── SALESMAN COMMISSION (F3) ───────────────────────────
+
+/** GET /reports/commission?from&to[&format] — each rep's net sales × their commission %. */
+router.get("/commission", requirePermission("reports.view"), async (req, res, next) => {
+  try {
+    const { from, to, meta } = periodOf(req);
+    const [saleAgg, retAgg, users] = await Promise.all([
+      prisma.sale.groupBy({ by: ["userId"], where: { date: { gte: from, lte: to }, status: "COMPLETED", isReturn: false }, _sum: { grandTotal: true, profit: true } }),
+      prisma.sale.groupBy({ by: ["userId"], where: { date: { gte: from, lte: to }, isReturn: true }, _sum: { grandTotal: true } }),
+      prisma.user.findMany({ select: { id: true, name: true, commissionPercent: true } }),
+    ]);
+    const retMap = new Map(retAgg.map((r) => [r.userId, num(r._sum.grandTotal)]));
+    const byUser = new Map(users.map((u) => [u.id, u]));
+    const rows = saleAgg
+      .map((s) => {
+        const u = byUser.get(s.userId);
+        const pct = num(u?.commissionPercent);
+        const netSales = r2(num(s._sum.grandTotal) - (retMap.get(s.userId) ?? 0));
+        return { rep: u?.name ?? "—", netSales, pct, commission: r2((netSales * pct) / 100) };
+      })
+      .filter((r) => r.netSales !== 0 || r.commission !== 0)
+      .sort((a, b) => b.commission - a.commission);
+    const doc: ReportDoc = {
+      title: "Salesman Commission",
+      meta,
+      columns: [
+        { header: "Rep", key: "rep" },
+        { header: "Net sales", key: "netSales", align: "right", money: true },
+        { header: "Rate %", key: "pct", align: "right" },
+        { header: "Commission", key: "commission", align: "right", money: true },
+      ],
+      rows,
+      totals: { rep: "Total", netSales: r2(rows.reduce((a, r) => a + r.netSales, 0)), commission: r2(rows.reduce((a, r) => a + r.commission, 0)) },
+    };
+    return sendReport(res, fmtReq(req), "commission", doc, await loadSettings());
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ─────────────────────────── PENDING DELIVERIES (F2) ───────────────────────────
 
 /** GET /reports/pending-deliveries[&format] — sold items not yet fully dispatched. */

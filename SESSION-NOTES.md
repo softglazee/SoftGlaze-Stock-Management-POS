@@ -96,7 +96,13 @@ Owner approved a 36-feature batch (`docs/13-FEATURE-BATCH-PLAN.md`, beyond docs/
 - Web: **Outreach** page (People nav, Megaphone) with Statements / Bulk Message / Udhaar Reminders tabs; customer **email** field; Settings → Integrations **SMS gateway** card. Reminder tier day/text settings are in EDITABLE_KEYS (sane defaults; no dedicated UI yet).
 - **Verified (throwaway DB, dropped):** 11/11 — 40-day debt → preview tier ≥2 + send + tier advances + cooldown; campaign wa.me links; statements endpoint graceful with no SMTP; MessageLog captured; **integrity all-green + BS ₨0**. Both apps tsc clean.
 
-**Next:** Batch F — HR & staff (F1 payslip PDF · F2 biometric attendance CSV import · F3 salesman commission), then G (POS), H (platform). H1 cloud backup 🔌 needs owner creds.
+**Batch F — HR & staff (F1–F3) DONE.** Migration `f_hr` (`User.commissionPercent`). No new accounting surface (payslip read-only, attendance no-money, commission read-only; salary path unchanged).
+- **F1 Payslip PDF:** `GET /reports/payslip?salaryId&format` builds a ReportDoc (base/bonus/deductions/advance → net paid) via the shared exporter. Download button (FileDown) on the Salaries tab.
+- **F2 Attendance CSV import:** `POST /attendance/import` {csv} — flexible header parser (code|employeecode|id, date, status[P/A/H/L] OR in/out punches → PRESENT/HALF_DAY), resolves employee by code, upserts one mark/day, reports imported/skipped/errors. Upload button on the Attendance tab.
+- **F3 Salesman commission:** `User.commissionPercent` (users create/update + Users form field). `GET /reports/commission?from&to` groups sales by userId, net sales (minus returns) × the rep's %. New "Salesman Commission" report entry.
+- **Verified (throwaway DB, dropped):** 7/7 — commission ₨1000×5%=₨50, salary ₨20000 payslip + PDF download, attendance import (2 in / 1 skipped bad code), **integrity all-green + BS ₨0**. Both apps tsc clean.
+
+**Next:** Batch G — POS experience (G1 favourites grid · G2 walk-in return · G3 discount approval · G4 loyalty points · G5 customer display), then H (platform). H1 cloud backup 🔌 needs owner creds.
 
 ---
 

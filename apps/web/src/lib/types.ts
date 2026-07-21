@@ -640,7 +640,7 @@ export type DashboardData = {
 };
 
 // ── Admin (Phase 6) ──
-export type ManagedUser = { id: string; name: string; email: string; phone: string | null; role: string; isActive: boolean; createdAt: string };
+export type ManagedUser = { id: string; name: string; email: string; phone: string | null; role: string; isActive: boolean; commissionPercent?: string; createdAt: string };
 export type AppNotification = { id: string; type: string; title: string; message: string; entity: string | null; entityId: string | null; isRead: boolean; createdAt: string };
 export type MessageLogEntry = { id: string; channel: "WHATSAPP" | "EMAIL"; recipient: string; template: string; refType: string | null; refId: string | null; status: string; error: string | null; createdAt: string };
 export type AuditLogEntry = { id: string; action: string; entity: string | null; entityId: string | null; details: string | null; ip: string | null; createdAt: string; user?: { name: string } | null };

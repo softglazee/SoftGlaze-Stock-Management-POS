@@ -73,12 +73,12 @@ export default function Users() {
 }
 
 function UserForm({ user, onClose, onSaved }: { user: ManagedUser | null; onClose: () => void; onSaved: () => void }) {
-  const [form, setForm] = useState({ name: user?.name ?? "", email: user?.email ?? "", phone: user?.phone ?? "", role: user?.role && user.role !== "SUPER_ADMIN" ? user.role : "CASHIER", password: "" });
+  const [form, setForm] = useState({ name: user?.name ?? "", email: user?.email ?? "", phone: user?.phone ?? "", role: user?.role && user.role !== "SUPER_ADMIN" ? user.role : "CASHIER", password: "", commissionPercent: String(user?.commissionPercent ?? "0") });
   const [error, setError] = useState<string | null>(null);
   const save = useMutation({
     mutationFn: () => user
-      ? api(`/users/${user.id}`, { method: "PATCH", body: { name: form.name, phone: form.phone || null, role: form.role } })
-      : api("/users", { method: "POST", body: { name: form.name, email: form.email, phone: form.phone || null, role: form.role, password: form.password } }),
+      ? api(`/users/${user.id}`, { method: "PATCH", body: { name: form.name, phone: form.phone || null, role: form.role, commissionPercent: Number(form.commissionPercent) || 0 } })
+      : api("/users", { method: "POST", body: { name: form.name, email: form.email, phone: form.phone || null, role: form.role, password: form.password, commissionPercent: Number(form.commissionPercent) || 0 } }),
     onSuccess: onSaved,
     onError: (e: ApiError) => setError(e.message),
   });
@@ -90,7 +90,10 @@ function UserForm({ user, onClose, onSaved }: { user: ManagedUser | null; onClos
           <div><label className="label">Role</label><select className="input" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>{ROLES.map((r) => <option key={r} value={r}>{r}</option>)}</select></div>
         </div>
         <div><label className="label">Email</label><input className="input" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} disabled={!!user} required /></div>
-        <div><label className="label">Phone (optional)</label><input className="input mono" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
+        <div className="grid grid-cols-2 gap-3">
+          <div><label className="label">Phone (optional)</label><input className="input mono" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
+          <div><label className="label">Commission %</label><input className="input mono" type="number" step="0.01" min="0" max="100" value={form.commissionPercent} onChange={(e) => setForm({ ...form, commissionPercent: e.target.value })} /></div>
+        </div>
         {!user && <div><label className="label">Temporary password</label><input className="input" type="text" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="At least 8 characters" required /></div>}
         {error && <p className="text-danger text-sm">{error}</p>}
         <div className="flex justify-end gap-2"><button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button><button className="btn btn-secondary !border-accent !text-accent" disabled={save.isPending}>{save.isPending ? "Saving…" : "Save"}</button></div>

@@ -29,6 +29,7 @@ model User {
   passwordHash String
   role         Role      @default(CASHIER)
   isActive     Boolean   @default(true)
+  commissionPercent Decimal @default(0) @db.Decimal(5, 2) // F3 — salesman commission on their net sales
   refreshToken String?   // hashed refresh token
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt

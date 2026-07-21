@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Pencil, Trash2, IdCard, HandCoins, Camera, History, CalendarDays, Building2, Clock, CheckCircle2, XCircle, Coins, CalendarCheck } from "lucide-react";
-import { api, ApiError } from "../lib/api";
+import { Plus, Pencil, Trash2, IdCard, HandCoins, Camera, History, CalendarDays, Building2, Clock, CheckCircle2, XCircle, Coins, CalendarCheck, FileDown, Upload } from "lucide-react";
+import { api, ApiError, download } from "../lib/api";
 import { Employee, SalaryPayment, Department, Shift, Holiday, LeaveRequest, Account, Attendance, AttendanceStatus, AttendanceSummary, EmployeeAdvance, SalaryPreview } from "../lib/types";
 import { num, fmtMoney } from "../lib/format";
 import { useAuth } from "../context/AuthContext";
@@ -367,6 +367,12 @@ function AttendanceTab({ can }: { can: (...k: string[]) => boolean }) {
     onSuccess: () => { toast("All marked present"); refresh(); },
     onError: (e: ApiError) => toast(e.message, "error"),
   });
+  const importRef = useRef<HTMLInputElement>(null);
+  const importCsv = useMutation({
+    mutationFn: (csv: string) => api<{ imported: number; skipped: number; errors: string[] }>("/attendance/import", { method: "POST", body: { csv } }),
+    onSuccess: (d) => { toast(`Imported ${d.imported} mark(s)${d.skipped ? `, ${d.skipped} skipped` : ""}`, d.skipped ? "error" : "success"); refresh(); },
+    onError: (e: ApiError) => toast(e.message, "error"),
+  });
   const sumRows = sumData?.rows ?? [];
 
   return (
@@ -374,6 +380,12 @@ function AttendanceTab({ can }: { can: (...k: string[]) => boolean }) {
       <div className="flex flex-wrap items-end gap-2">
         <div><label className="label">Date</label><input className="input !w-44" type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
         <div className="flex-1" />
+        {manage && (
+          <>
+            <input ref={importRef} type="file" accept=".csv,text/csv" className="hidden" onChange={async (e) => { const f = e.target.files?.[0]; if (f) importCsv.mutate(await f.text()); e.target.value = ""; }} />
+            <button className="btn btn-secondary" title="Import a fingerprint-machine CSV (columns: code, date, status or in/out)" onClick={() => importRef.current?.click()} disabled={importCsv.isPending}><Upload size={15} /> {importCsv.isPending ? "Importing…" : "Import CSV"}</button>
+          </>
+        )}
         {manage && employees.length > 0 && <button className="btn btn-secondary" onClick={() => markAll.mutate()} disabled={markAll.isPending}><CheckCircle2 size={15} /> Mark all present</button>}
       </div>
 
@@ -463,7 +475,10 @@ function SalariesTab({ can }: { can: (...k: string[]) => boolean }) {
                   <td className="px-4 py-2">{s.month}</td>
                   <td className="px-4 py-2 text-muted">{new Date(s.date).toLocaleDateString()}</td>
                   <td className="px-4 py-2 text-right money font-semibold">{fmtMoney(s.netPaid)}</td>
-                  <td className="px-4 py-2">{can("salary.pay") && <button className="btn btn-secondary !p-1.5 hover:!text-danger" title="Reverse" onClick={() => setDeleting(s)}><Trash2 size={13} /></button>}</td>
+                  <td className="px-4 py-2 flex gap-1">
+                    <button className="btn btn-secondary !p-1.5" title="Download payslip PDF" onClick={() => download(`/reports/payslip?salaryId=${s.id}&format=pdf`, `payslip-${s.refNo}.pdf`).catch((e) => toast((e as ApiError).message || "Download failed", "error"))}><FileDown size={13} /></button>
+                    {can("salary.pay") && <button className="btn btn-secondary !p-1.5 hover:!text-danger" title="Reverse" onClick={() => setDeleting(s)}><Trash2 size={13} /></button>}
+                  </td>
                 </tr>
               ))}
             </tbody>

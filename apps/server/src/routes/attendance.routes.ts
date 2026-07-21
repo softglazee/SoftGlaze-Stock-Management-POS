@@ -117,6 +117,78 @@ router.post("/bulk", requirePermission("employees.manage"), async (req, res, nex
   }
 });
 
+/**
+ * POST /attendance/import — F2: import a CSV exported from a biometric/fingerprint
+ * machine. Flexible columns (case-insensitive headers): an employee `code` (matches
+ * Employee.code), a `date`, and either a `status` (P/A/H/L or the full word) or punch
+ * times (`in`/`out` → PRESENT, HALF_DAY if only one punch). Rows upsert one mark per
+ * employee-day; unknown codes/bad dates are skipped and reported. No money effect.
+ */
+const importSchema = z.object({ csv: z.string().min(1, "Paste or upload a CSV") });
+
+function parseCsv(text: string): Record<string, string>[] {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  if (lines.length < 2) return [];
+  const split = (l: string) => l.split(",").map((c) => c.trim().replace(/^"|"$/g, ""));
+  const headers = split(lines[0]).map((h) => h.toLowerCase());
+  return lines.slice(1).map((l) => { const cells = split(l); return Object.fromEntries(headers.map((h, i) => [h, cells[i] ?? ""])); });
+}
+
+function pick(row: Record<string, string>, keys: string[]): string {
+  for (const k of keys) if (row[k]) return row[k];
+  return "";
+}
+
+function statusFrom(row: Record<string, string>): "PRESENT" | "ABSENT" | "HALF_DAY" | "LEAVE" | null {
+  const raw = pick(row, ["status", "attendance", "state"]).toUpperCase();
+  if (raw) {
+    if (raw.startsWith("P")) return "PRESENT";
+    if (raw.startsWith("A")) return "ABSENT";
+    if (raw.startsWith("H")) return "HALF_DAY";
+    if (raw.startsWith("L")) return "LEAVE";
+  }
+  const cin = pick(row, ["in", "checkin", "check-in", "timein", "time in", "punchin"]);
+  const cout = pick(row, ["out", "checkout", "check-out", "timeout", "time out", "punchout"]);
+  if (cin || cout) return cin && cout ? "PRESENT" : "HALF_DAY";
+  return null;
+}
+
+router.post("/import", requirePermission("employees.manage"), async (req, res, next) => {
+  try {
+    const body = importSchema.parse(req.body);
+    const rows = parseCsv(body.csv);
+    if (rows.length === 0) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: "No rows found — needs a header line + data" } });
+
+    const employees = await prisma.employee.findMany({ select: { id: true, code: true } });
+    const byCode = new Map(employees.map((e) => [e.code.toLowerCase(), e.id]));
+
+    let imported = 0;
+    const errors: string[] = [];
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const code = pick(row, ["code", "employeecode", "employee code", "empcode", "emp code", "id", "employeeid"]).toLowerCase();
+      const employeeId = byCode.get(code);
+      if (!employeeId) { errors.push(`Row ${i + 2}: unknown employee "${code || "(blank)"}"`); continue; }
+      const dateStr = pick(row, ["date", "day", "attendancedate"]);
+      const parsed = new Date(dateStr);
+      if (!dateStr || isNaN(parsed.getTime())) { errors.push(`Row ${i + 2}: bad date "${dateStr}"`); continue; }
+      const status = statusFrom(row);
+      if (!status) { errors.push(`Row ${i + 2}: no status/punch`); continue; }
+      const day = dayOf(parsed);
+      await prisma.attendance.upsert({
+        where: { employeeId_date: { employeeId, date: day } },
+        create: { employeeId, date: day, status, note: "Imported" },
+        update: { status },
+      });
+      imported++;
+    }
+    res.json({ ok: true, data: { imported, skipped: errors.length, errors: errors.slice(0, 20) } });
+  } catch (err: any) {
+    if (err instanceof z.ZodError) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: err.errors[0].message } });
+    next(err);
+  }
+});
+
 /** DELETE /attendance/:id — remove a mark. */
 router.delete("/:id", requirePermission("employees.manage"), async (req, res, next) => {
   try {

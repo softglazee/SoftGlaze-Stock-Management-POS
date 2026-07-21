@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { FileText, Sheet, BarChart3, TrendingUp, Truck, Boxes, Users, Receipt, CreditCard, Activity, IdCard, CalendarClock, CalendarCheck, Tags, PackageMinus, LineChart, PackageX } from "lucide-react";
+import { FileText, Sheet, BarChart3, TrendingUp, Truck, Boxes, Users, Receipt, CreditCard, Activity, IdCard, CalendarClock, CalendarCheck, Tags, PackageMinus, LineChart, PackageX, Percent } from "lucide-react";
 import { api, download, ApiError } from "../lib/api";
 import { ReportTable } from "../lib/types";
 import { fmtMoney } from "../lib/format";
@@ -23,6 +23,7 @@ const REPORTS: Cfg[] = [
   { key: "payables", label: "Payables Aging", path: "/reports/payables", icon: Truck },
   { key: "expenses", label: "Expenses by Category", path: "/reports/expenses", icon: Receipt, period: true },
   { key: "salaries", label: "Salary Register", path: "/reports/salaries", icon: IdCard, period: true },
+  { key: "commission", label: "Salesman Commission", path: "/reports/commission", icon: Percent, period: true, perm: "reports.view" },
   { key: "attendance-sheet", label: "Attendance Sheet", path: "/reports/attendance-sheet", icon: CalendarCheck, month: true },
   { key: "sales-by-payment-method", label: "Sales by Payment Method", path: "/reports/sales-by-payment-method", icon: CreditCard, period: true },
   { key: "stock-movements", label: "Stock Movements", path: "/reports/stock-movements", icon: Activity, period: true },
