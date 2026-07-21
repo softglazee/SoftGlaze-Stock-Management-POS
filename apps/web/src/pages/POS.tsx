@@ -45,6 +45,8 @@ export default function POS() {
     queryFn: () => api<{ products: Product[] }>(`/products/search?q=${encodeURIComponent(prodSearch)}`),
     enabled: prodSearch.trim().length > 0,
   });
+  // Default catalog shown before searching — click any tile to add it.
+  const { data: allProducts } = useQuery({ queryKey: ["pos-all-products"], queryFn: () => api<{ products: Product[] }>("/products?limit=100&status=active") });
   const methods = methodData?.methods ?? [];
   const cashMethodId = methods.find((m) => m.isCash)?.id ?? methods[0]?.id ?? "";
 
@@ -57,6 +59,8 @@ export default function POS() {
   const paidSum = payments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
   const due = Math.max(0, payable - paidSum);
   const change = Math.max(0, paidSum - payable);
+  // Grid shows search hits while typing, otherwise the whole active catalog.
+  const shownProducts = prodSearch.trim() ? (prodResults?.products ?? []) : (allProducts?.products ?? []);
 
   // One default cash row that tracks the grand total until the cashier edits payments
   useEffect(() => {
@@ -160,15 +164,13 @@ export default function POS() {
             </div>
           </div>
           <div className="flex-1 overflow-y-auto p-3 grid grid-cols-2 xl:grid-cols-3 gap-2 content-start">
-            {prodSearch.trim() === "" ? (
+            {shownProducts.length === 0 ? (
               <div className="col-span-full text-center text-muted py-16">
                 <Package size={28} className="mx-auto mb-2 opacity-60" />
-                Search a product to add it to the bill.
+                {prodSearch.trim() ? `No products match "${prodSearch}".` : "No products yet — add some under Products."}
               </div>
-            ) : (prodResults?.products ?? []).length === 0 ? (
-              <div className="col-span-full text-center text-muted py-16">No products match "{prodSearch}".</div>
             ) : (
-              prodResults!.products.map((p) => (
+              shownProducts.map((p) => (
                 <button key={p.id} onClick={() => addProduct(p)} className="card p-2.5 text-left hover:border-accent transition-colors flex flex-col gap-1">
                   <div className="flex items-center gap-2">
                     {p.images?.[0] ? <img src={p.images[0].thumbPath ?? p.images[0].path} alt="" className="w-8 h-8 rounded object-cover border border-edge" /> : <span className="w-8 h-8 rounded bg-surface-2 border border-edge flex items-center justify-center"><Package size={14} className="text-muted" /></span>}
