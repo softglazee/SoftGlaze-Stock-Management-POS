@@ -62,7 +62,7 @@ function ProfileTab() {
   const s = { ...data?.settings, ...form };
 
   const save = useMutation({
-    mutationFn: () => { const body: Record<string, string> = {}; FIELDS.flat().forEach((f) => { body[f.key] = form[f.key] ?? ""; }); body.receipt_size = form.receipt_size ?? s.receipt_size ?? "80mm"; body.round_off_to = form.round_off_to ?? s.round_off_to ?? "0"; body.allow_negative_stock = form.allow_negative_stock ?? s.allow_negative_stock ?? "0"; return api("/settings", { method: "PATCH", body }); },
+    mutationFn: () => { const body: Record<string, string> = {}; FIELDS.flat().forEach((f) => { body[f.key] = form[f.key] ?? ""; }); body.receipt_size = form.receipt_size ?? s.receipt_size ?? "80mm"; body.round_off_to = form.round_off_to ?? s.round_off_to ?? "0"; body.allow_negative_stock = form.allow_negative_stock ?? s.allow_negative_stock ?? "0"; ["max_discount_percent", "loyalty_enabled", "loyalty_earn_per_100", "loyalty_redeem_value"].forEach((k) => { body[k] = form[k] ?? s[k] ?? ""; }); return api("/settings", { method: "PATCH", body }); },
     onSuccess: () => { toast("Shop profile saved"); qc.invalidateQueries({ queryKey: ["settings"] }); },
     onError: (e: ApiError) => toast(e.message, "error"),
   });
@@ -99,6 +99,10 @@ function ProfileTab() {
           <div><label className="label">Default receipt size</label><select className="input" value={s.receipt_size ?? "80mm"} onChange={(e) => set("receipt_size", e.target.value)}><option value="80mm">80mm thermal</option><option value="a4">A4</option></select></div>
           <div><label className="label">Round off total to</label><select className="input" value={s.round_off_to ?? "0"} onChange={(e) => set("round_off_to", e.target.value)}><option value="0">No rounding</option><option value="1">Nearest ₨1</option><option value="5">Nearest ₨5</option><option value="10">Nearest ₨10</option></select></div>
           <div><label className="label">Allow overselling (negative stock)</label><select className="input" value={s.allow_negative_stock ?? "0"} onChange={(e) => set("allow_negative_stock", e.target.value)}><option value="0">No — block if out of stock</option><option value="1">Yes — allow, flag as backorder</option></select></div>
+          <div><label className="label">Max discount % (needs approval above)</label><input className="input mono" type="number" step="0.5" min="0" max="100" value={s.max_discount_percent ?? "0"} onChange={(e) => set("max_discount_percent", e.target.value)} placeholder="0 = no limit" /></div>
+          <div><label className="label">Loyalty points</label><select className="input" value={s.loyalty_enabled ?? "0"} onChange={(e) => set("loyalty_enabled", e.target.value)}><option value="0">Off</option><option value="1">On — earn & redeem</option></select></div>
+          <div><label className="label">Points earned per ₨100</label><input className="input mono" type="number" step="0.1" min="0" value={s.loyalty_earn_per_100 ?? "1"} onChange={(e) => set("loyalty_earn_per_100", e.target.value)} /></div>
+          <div><label className="label">₨ value of 1 point (on redeem)</label><input className="input mono" type="number" step="0.1" min="0" value={s.loyalty_redeem_value ?? "1"} onChange={(e) => set("loyalty_redeem_value", e.target.value)} /></div>
         </div>
         <div className="flex justify-end"><button className="btn btn-secondary !border-accent !text-accent" onClick={() => save.mutate()} disabled={save.isPending}>{save.isPending ? "Saving…" : "Save profile"}</button></div>
       </div>

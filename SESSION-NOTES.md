@@ -102,7 +102,15 @@ Owner approved a 36-feature batch (`docs/13-FEATURE-BATCH-PLAN.md`, beyond docs/
 - **F3 Salesman commission:** `User.commissionPercent` (users create/update + Users form field). `GET /reports/commission?from&to` groups sales by userId, net sales (minus returns) × the rep's %. New "Salesman Commission" report entry.
 - **Verified (throwaway DB, dropped):** 7/7 — commission ₨1000×5%=₨50, salary ₨20000 payslip + PDF download, attendance import (2 in / 1 skipped bad code), **integrity all-green + BS ₨0**. Both apps tsc clean.
 
-**Next:** Batch G — POS experience (G1 favourites grid · G2 walk-in return · G3 discount approval · G4 loyalty points · G5 customer display), then H (platform). H1 cloud backup 🔌 needs owner creds.
+**Batch G — POS experience (G1–G5) DONE.** Migration `g_pos` (`Customer.loyaltyPoints` + `LoyaltyEntry`/`LoyaltyType`).
+- **G1 Favourites:** `pos_favourites` setting (comma-sep product IDs). POS: a ★ toggle on each catalog tile + a "Favourites" quick-add strip; managed inline (PATCH /settings).
+- **G2 Walk-in return:** `POST /sales/blank-return` — a return Sale with no customer/original: stock back in (SALE_RETURN at current cost) + cash REFUND_OUT. Same accounting shape as an invoiced return (verified BS-safe). New **Walk-in Return** page (Sell nav).
+- **G3 Discount approval:** `max_discount_percent` setting. Sales route computes the manual discount % (bill + line discounts / gross) and 409s `DISCOUNT_APPROVAL` when over the cap unless `overrideDiscount` + the user has `sales.discount_over_limit`. POS catches it and offers manager approval (mirrors the credit-limit flow).
+- **G4 Loyalty:** earn on the paid total (block-based: `floor(grandTotal/100) × earn_per_100`), redeem points as a bill discount (`points × redeem_value`, capped at subtotal). Points are a **memo, not a booked liability** — earning has no accounting effect, redeeming is just a discount (flows through totals) → balance sheet untouched. `LoyaltyEntry` logs EARN/REDEEM. POS shows points + a redeem input; settings on Shop Profile.
+- **G5 Customer display:** `/pos/display` full-screen page listens on a `pos-display` BroadcastChannel; POS broadcasts the live cart + payable + (on completion) thank-you/change. Same-PC 2nd monitor, no server.
+- **Verified (throwaway DB, dropped):** 12/12 — earn 20 → redeem 10 (₨10 off, grand ₨490) → 18 pts; discount 20% blocked (409) then approved with override (grand ₨800); walk-in return stock +2 + cash refund; favourites persist; **integrity all-green + BS ₨0 throughout**. Both apps tsc clean.
+
+**Next:** Batch H — platform & safety (H1 offsite backup 🔌 · H2 saved report filters · H3 2FA · H4 import-FX capture · H5 GST register · H6 bank reconciliation · H7 offline POS). H1 needs owner cloud creds.
 
 ---
 

@@ -40,6 +40,12 @@ const EDITABLE_KEYS = [
   "receipt_size",
   "round_off_to",
   "allow_negative_stock", // D2 — allow overselling (stock goes negative, line flagged backorder)
+  // Batch G — POS experience
+  "pos_favourites",        // G1 — comma-separated product IDs for the quick-sale grid
+  "max_discount_percent",  // G3 — bill discount cap before manager approval (0 = off)
+  "loyalty_enabled",       // G4 — "1" to earn/redeem points
+  "loyalty_earn_per_100",  // G4 — points earned per ₨100 spent
+  "loyalty_redeem_value",  // G4 — ₨ value of one point when redeemed
   // Regional
   "currency",
   "currency_symbol",

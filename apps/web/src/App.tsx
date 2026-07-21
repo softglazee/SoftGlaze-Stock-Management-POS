@@ -14,6 +14,8 @@ import Purchases from "./pages/Purchases";
 import Stock from "./pages/Stock";
 import WeightCalc from "./pages/WeightCalc";
 import POS from "./pages/POS";
+import Display from "./pages/Display";
+import WalkInReturn from "./pages/WalkInReturn";
 import Sales from "./pages/Sales";
 import Customers from "./pages/Customers";
 import Vendors from "./pages/Vendors";
@@ -66,12 +68,20 @@ export default function App() {
           </Protected>
         }
       />
-      {/* POS is full-screen (outside the sidebar layout) */}
+      {/* POS + customer display are full-screen (outside the sidebar layout) */}
       <Route
         path="/pos"
         element={
           <Protected>
             <POS />
+          </Protected>
+        }
+      />
+      <Route
+        path="/pos/display"
+        element={
+          <Protected>
+            <Display />
           </Protected>
         }
       />
@@ -85,6 +95,7 @@ export default function App() {
       >
         <Route path="/" element={<Dashboard />} />
         <Route path="/sales" element={<Sales />} />
+        <Route path="/walk-in-return" element={<WalkInReturn />} />
         <Route path="/products" element={<Products />} />
         <Route path="/brands" element={<Brands />} />
         <Route path="/categories" element={<Categories />} />

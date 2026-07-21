@@ -235,6 +235,7 @@ model Customer {
   reminderTier   Int      @default(0)       // E4 — highest udhaar-reminder tier already sent (0 = none)
   lastReminderAt DateTime?                  // E4 — when the last reminder went out (cooldown guard)
   email          String?                    // E1 — for auto-emailed statements
+  loyaltyPoints  Int      @default(0)       // G4 — running loyalty points balance
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
 
@@ -246,10 +247,33 @@ model Customer {
   rateContracts RateContract[]
   sites    CustomerSite[]
   deliveryTrips DeliveryTrip[]
+  loyaltyEntries LoyaltyEntry[]
 
   @@index([name])
   @@index([phone])
   @@index([priceGroupId])
+}
+
+// ─────────────────────────── LOYALTY (G4) ───────────────────────────
+// Points are a marketing memo, NOT a booked liability: earning adds points (no
+// accounting effect); redeeming spends points as a normal bill discount (which already
+// flows through the sale totals). So the balance sheet is untouched by loyalty.
+enum LoyaltyType {
+  EARN
+  REDEEM
+}
+
+model LoyaltyEntry {
+  id         String      @id @default(cuid())
+  customerId String
+  customer   Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  type       LoyaltyType
+  points     Int         // +earned / -redeemed (stored as a positive magnitude with type)
+  saleId     String?
+  note       String?
+  createdAt  DateTime    @default(now())
+
+  @@index([customerId, createdAt])
 }
 
 // ─────────────────────────── CUSTOMER SITES (C4) ───────────────────────────

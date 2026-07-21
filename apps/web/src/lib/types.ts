@@ -110,6 +110,7 @@ export type Customer = {
   priceGroupId: string | null;
   priceGroup?: { id: string; name: string; discountPercent: string } | null;
   reminderTier?: number;
+  loyaltyPoints?: number;
   isActive: boolean;
 };
 

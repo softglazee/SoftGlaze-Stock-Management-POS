@@ -43,6 +43,8 @@ const createSchema = z.object({
   notes: z.string().trim().max(1000).nullable().optional(),
   payments: z.array(paymentSchema).optional(),
   overrideCredit: z.boolean().optional(),
+  overrideDiscount: z.boolean().optional(), // G3 — manager approving an over-limit discount
+  redeemPoints: z.coerce.number().int().min(0).optional(), // G4 — loyalty points to spend as a discount
 });
 
 const productForSale = { comboItems: { include: { componentProduct: { select: { id: true, name: true, type: true, costPrice: true } } } } } satisfies Prisma.ProductInclude;
@@ -150,9 +152,9 @@ router.post("/", requirePermission("sales.create"), async (req, res, next) => {
     const body = createSchema.parse(req.body);
 
     // Customer (optional; walk-in when null)
-    let customer = null as null | { id: string; name: string; balance: Prisma.Decimal; creditLimit: Prisma.Decimal };
+    let customer = null as null | { id: string; name: string; balance: Prisma.Decimal; creditLimit: Prisma.Decimal; loyaltyPoints: number };
     if (body.customerId) {
-      const c = await prisma.customer.findUnique({ where: { id: body.customerId }, select: { id: true, name: true, balance: true, creditLimit: true, isActive: true } });
+      const c = await prisma.customer.findUnique({ where: { id: body.customerId }, select: { id: true, name: true, balance: true, creditLimit: true, loyaltyPoints: true, isActive: true } });
       if (!c) return res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "Customer not found" } });
       customer = c;
     }
@@ -188,7 +190,35 @@ router.post("/", requirePermission("sales.create"), async (req, res, next) => {
       totalCost = round2(totalCost + l.qty * unitCost);
       return { line: l, product: p, total, unitCost };
     });
-    const rawTotal = round2(subTotal - body.discount + body.tax + body.otherCharges);
+    // G3 + G4 — settings for discount approval + loyalty
+    const posRows = await prisma.setting.findMany({ where: { key: { in: ["max_discount_percent", "loyalty_enabled", "loyalty_earn_per_100", "loyalty_redeem_value"] } } });
+    const posSet = Object.fromEntries(posRows.map((r) => [r.key, r.value]));
+
+    // G4 — redeem loyalty points as an extra discount (a memo spend, no accounting surface).
+    let pointsDiscount = 0;
+    const redeemPoints = Math.max(0, Math.floor(body.redeemPoints ?? 0));
+    if (redeemPoints > 0) {
+      if (posSet.loyalty_enabled !== "1") return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: "Loyalty is turned off" } });
+      if (!customer) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: "Select a customer to redeem points" } });
+      if (customer.loyaltyPoints < redeemPoints) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: `Only ${customer.loyaltyPoints} points available` } });
+      const redeemValue = Math.max(0, Number(posSet.loyalty_redeem_value || 1));
+      pointsDiscount = Math.min(round2(redeemPoints * redeemValue), subTotal); // can't discount past the goods value
+    }
+
+    // G3 — cap the manual (cashier) discount; over-limit needs the discount-override permission.
+    const cap = Number(posSet.max_discount_percent || 0);
+    if (cap > 0) {
+      const grossValue = round2(computed.reduce((s, c) => s + c.line.qty * c.line.unitPrice, 0));
+      const manualDiscount = round2(body.discount + computed.reduce((s, c) => s + c.line.discount, 0));
+      const pct = grossValue > 0 ? (manualDiscount / grossValue) * 100 : 0;
+      if (pct > cap + 0.001) {
+        const mayOverride = body.overrideDiscount && (await roleHasPermission(req.user!.role, "sales.discount_over_limit"));
+        if (!mayOverride) return res.status(409).json({ ok: false, error: { code: "DISCOUNT_APPROVAL", message: `Discount ${pct.toFixed(1)}% exceeds the ${cap}% limit — needs manager approval` } });
+      }
+    }
+
+    const effectiveDiscount = round2(body.discount + pointsDiscount);
+    const rawTotal = round2(subTotal - effectiveDiscount + body.tax + body.otherCharges);
     if (rawTotal < 0) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: "Discount is larger than the total" } });
     // A5 — round the payable to the nearest N (shop setting); the difference is stored on
     // the sale as roundOff and folds into grandTotal, so the books stay balanced.
@@ -254,7 +284,7 @@ router.post("/", requirePermission("sales.create"), async (req, res, next) => {
       const created = await tx.sale.create({
         data: {
           invoiceNo, customerId: customer?.id ?? null, siteId, userId: req.user!.id, status: "COMPLETED", ...(body.date ? { date: body.date } : {}),
-          subTotal: money(subTotal), discount: money(body.discount), tax: money(body.tax), otherCharges: money(body.otherCharges), roundOff: money(roundOff),
+          subTotal: money(subTotal), discount: money(effectiveDiscount), tax: money(body.tax), otherCharges: money(body.otherCharges), roundOff: money(roundOff),
           grandTotal: money(grandTotal), paidAmount: money(paidAmount), dueAmount: money(dueAmount), totalCost: money(totalCost), profit: money(profit), notes: body.notes || null,
         },
       });
@@ -274,6 +304,21 @@ router.post("/", requirePermission("sales.create"), async (req, res, next) => {
       if (customer && dueAmount > 0) await tx.customer.update({ where: { id: customer.id }, data: { balance: { increment: money(dueAmount) } } });
       for (const p of body.payments ?? []) {
         await postPayment(tx, { type: "SALE_RECEIPT", methodId: p.methodId, amount: p.amount, customerId: customer?.id ?? null, saleId: created.id, siteId, userId: req.user!.id, notes: `Sale ${invoiceNo}` });
+      }
+      // G4 — loyalty: spend redeemed points, then earn on the paid total. Memo only (no ledger).
+      if (customer) {
+        if (redeemPoints > 0) {
+          await tx.customer.update({ where: { id: customer.id }, data: { loyaltyPoints: { decrement: redeemPoints } } });
+          await tx.loyaltyEntry.create({ data: { customerId: customer.id, type: "REDEEM", points: redeemPoints, saleId: created.id, note: `Redeemed on ${invoiceNo}` } });
+        }
+        if (posSet.loyalty_enabled === "1") {
+          const earnPer100 = Math.max(0, Number(posSet.loyalty_earn_per_100 || 0));
+          const earned = Math.floor(Math.floor(grandTotal / 100) * earnPer100); // points per COMPLETE ₨100
+          if (earned > 0) {
+            await tx.customer.update({ where: { id: customer.id }, data: { loyaltyPoints: { increment: earned } } });
+            await tx.loyaltyEntry.create({ data: { customerId: customer.id, type: "EARN", points: earned, saleId: created.id, note: `Earned on ${invoiceNo}` } });
+          }
+        }
       }
       await tx.auditLog.create({ data: { userId: req.user!.id, action: "CREATE_SALE", entity: "Sale", entityId: created.id, details: `${invoiceNo} · ₨${grandTotal}${dueAmount > 0 ? ` · udhaar ₨${dueAmount}` : ""}` } });
       return created;
@@ -377,6 +422,60 @@ router.post("/:id/return", requirePermission("sales.return"), async (req, res, n
         if (original.customerId) await tx.customer.update({ where: { id: original.customerId }, data: { balance: { increment: money(returnValue) } } });
       }
       await tx.auditLog.create({ data: { userId: req.user!.id, action: "SALE_RETURN", entity: "Sale", entityId: doc.id, details: `${invoiceNo} of ${original.invoiceNo} · ₨${returnValue}` } });
+      return doc;
+    });
+
+    const full = await prisma.sale.findUnique({ where: { id: ret.id }, include: saleInclude });
+    const canProfit = await roleHasPermission(req.user!.role, "reports.profit");
+    res.status(201).json({ ok: true, data: { sale: scrubProfit(full, canProfit) } });
+  } catch (err: any) {
+    if (err instanceof z.ZodError) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: err.errors[0].message } });
+    if (err instanceof InsufficientStockError) return res.status(409).json({ ok: false, error: { code: err.code, message: err.message } });
+    next(err);
+  }
+});
+
+// ── G2 — walk-in return (no original invoice) ──
+const blankReturnSchema = z.object({
+  items: z.array(z.object({ productId: z.string().min(1), qty: z.coerce.number().positive(), unitPrice: z.coerce.number().min(0) })).min(1, "Add at least one item"),
+  refundMethodId: z.string().min(1, "Pick which account refunds the cash"),
+  notes: z.string().trim().max(1000).nullable().optional(),
+});
+
+/**
+ * POST /sales/blank-return — refund/exchange a walk-in customer with no original bill.
+ * Books a return Sale (isReturn, no customer): stock comes back in at current cost, the
+ * refund goes out in cash. Same accounting shape as an invoiced return — a negative sale
+ * settled in cash — so the balance sheet stays exact (verified).
+ */
+router.post("/blank-return", requirePermission("sales.return"), async (req, res, next) => {
+  try {
+    const body = blankReturnSchema.parse(req.body);
+    const method = await prisma.paymentMethod.findUnique({ where: { id: body.refundMethodId }, select: { id: true } });
+    if (!method) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: "Unknown refund account" } });
+    const ids = [...new Set(body.items.map((i) => i.productId))];
+    const products = await prisma.product.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, type: true, costPrice: true } });
+    const byId = new Map(products.map((p) => [p.id, p]));
+    for (const it of body.items) {
+      const p = byId.get(it.productId);
+      if (!p) return res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "One of the products was not found" } });
+      if (p.type !== "STANDARD") return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: `${p.name} can't be returned without an invoice` } });
+    }
+    let returnValue = 0, returnCost = 0;
+    for (const it of body.items) { returnValue = round2(returnValue + it.qty * it.unitPrice); returnCost = round2(returnCost + it.qty * Number(byId.get(it.productId)!.costPrice)); }
+
+    const ret = await prisma.$transaction(async (tx) => {
+      const invoiceNo = await nextNumber(tx, "sale_return", "SRET");
+      const doc = await tx.sale.create({
+        data: { invoiceNo, customerId: null, userId: req.user!.id, status: "RETURNED", isReturn: true, subTotal: money(returnValue), grandTotal: money(returnValue), paidAmount: money(0), dueAmount: money(0), totalCost: money(returnCost), profit: money(round2(returnValue - returnCost)), notes: body.notes || "Walk-in return (no invoice)" },
+      });
+      for (const it of body.items) {
+        const p = byId.get(it.productId)!;
+        await tx.saleItem.create({ data: { saleId: doc.id, productId: it.productId, qty: new Prisma.Decimal(it.qty), unitPrice: money(it.unitPrice), unitCost: money(Number(p.costPrice)), discount: money(0), taxAmount: money(0), total: money(round2(it.qty * it.unitPrice)) } });
+        await applyMovement(tx, { productId: it.productId, type: "SALE_RETURN", qty: it.qty, unitCost: money(Number(p.costPrice)), refType: "SALE_RETURN", refId: doc.id, notes: `Walk-in return ${invoiceNo}` });
+      }
+      await postPayment(tx, { type: "REFUND_OUT", methodId: body.refundMethodId, amount: returnValue, customerId: null, saleId: doc.id, userId: req.user!.id, notes: `Cash refund ${invoiceNo}` });
+      await tx.auditLog.create({ data: { userId: req.user!.id, action: "BLANK_RETURN", entity: "Sale", entityId: doc.id, details: `${invoiceNo} · walk-in · ₨${returnValue}` } });
       return doc;
     });
 

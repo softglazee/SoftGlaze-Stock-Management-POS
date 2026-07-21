@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { Search, X, Plus, Trash2, UserPlus, ArrowLeft, Pause, FileText, CheckCircle2, Printer, Package, Scale, FileSignature, MapPin } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Search, X, Plus, Trash2, UserPlus, ArrowLeft, Pause, FileText, CheckCircle2, Printer, Package, Scale, FileSignature, MapPin, Star } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import { Product, Customer, PaymentMethod, Sale, WeightCalc, RateResolution, SiteBalancesView } from "../lib/types";
 import { num, fmtMoney, fmtQty } from "../lib/format";
@@ -15,7 +15,7 @@ import { waLink as buildWaLink } from "../lib/phone";
 
 type Line = { productId: string; name: string; sku: string; type: Product["type"]; unitShort: string; qty: string; unitPrice: string; listPrice: string; contractPriced: boolean; priceEdited: boolean; discount: string; stock: number; calc: (WeightProfile & { weightCalc: WeightCalc }) | null };
 type PayRow = { methodId: string; amount: string };
-type SelCustomer = { id: string; name: string; phone: string | null; balance: string; creditLimit: string } | null;
+type SelCustomer = { id: string; name: string; phone: string | null; balance: string; creditLimit: string; loyaltyPoints?: number } | null;
 
 export default function POS() {
   const { can } = useAuth();
@@ -25,6 +25,7 @@ export default function POS() {
   const [cart, setCart] = useState<Line[]>([]);
   const [customer, setCustomer] = useState<SelCustomer>(null);
   const [billDiscount, setBillDiscount] = useState("0");
+  const [redeemPoints, setRedeemPoints] = useState("0");
   const [tax, setTax] = useState("0");
   const [otherCharges, setOtherCharges] = useState("0");
   const [payments, setPayments] = useState<PayRow[]>([]);
@@ -69,10 +70,24 @@ export default function POS() {
   });
   const customerSites = (siteData?.sites ?? []).filter((s) => s.isActive);
   const methods = methodData?.methods ?? [];
+  // G1 — quick-sale favourites (product IDs saved in the pos_favourites setting).
+  const qc = useQueryClient();
+  const favIds = useMemo(() => new Set((settings?.settings.pos_favourites || "").split(",").map((s) => s.trim()).filter(Boolean)), [settings]);
+  const favProducts = (allProducts?.products ?? []).filter((p) => favIds.has(p.id));
+  async function toggleFav(id: string) {
+    const next = favIds.has(id) ? [...favIds].filter((x) => x !== id) : [...favIds, id];
+    try { await api("/settings", { method: "PATCH", body: { pos_favourites: next.join(",") } }); qc.invalidateQueries({ queryKey: ["settings"] }); }
+    catch (e) { toast((e as ApiError).message || "Couldn't update favourites", "error"); }
+  }
   const cashMethodId = methods.find((m) => m.isCash)?.id ?? methods[0]?.id ?? "";
 
   const subTotal = cart.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.unitPrice) || 0) - (Number(l.discount) || 0), 0);
-  const grand = Math.max(0, subTotal - (Number(billDiscount) || 0) + (Number(tax) || 0) + (Number(otherCharges) || 0));
+  // G4 — loyalty redemption folds into the bill discount (server recomputes the same way).
+  const loyaltyOn = settings?.settings.loyalty_enabled === "1";
+  const redeemValue = Number(settings?.settings.loyalty_redeem_value || 1);
+  const maxRedeem = Math.min(customer?.loyaltyPoints ?? 0, redeemValue > 0 ? Math.floor(subTotal / redeemValue) : 0);
+  const pointsDiscount = customer && loyaltyOn ? Math.round(Math.min((Number(redeemPoints) || 0) * redeemValue, subTotal) * 100) / 100 : 0;
+  const grand = Math.max(0, subTotal - (Number(billDiscount) || 0) - pointsDiscount + (Number(tax) || 0) + (Number(otherCharges) || 0));
   // A5 round-off: round the payable to the nearest N (setting) — server recomputes the same way.
   const roundTo = Number(settings?.settings.round_off_to || 0);
   const payable = roundTo > 0 ? Math.round(grand / roundTo) * roundTo : grand;
@@ -123,12 +138,12 @@ export default function POS() {
   function setLine(i: number, patch: Partial<Line>) { setCart((c) => c.map((l, idx) => (idx === i ? { ...l, ...patch } : l))); }
   function removeLine(i: number) { setCart((c) => c.filter((_, idx) => idx !== i)); }
   function resetSale() {
-    setCart([]); setCustomer(null); setBillDiscount("0"); setTax("0"); setOtherCharges("0");
+    setCart([]); setCustomer(null); setBillDiscount("0"); setRedeemPoints("0"); setTax("0"); setOtherCharges("0");
     setPayments([]); setPayTouched(false); setNotes(""); setError(null); setSuccess(null); setSiteId("");
     setTimeout(() => searchRef.current?.focus(), 50);
   }
 
-  async function submit(status: "COMPLETED" | "DRAFT" | "QUOTATION", overrideCredit = false) {
+  async function submit(status: "COMPLETED" | "DRAFT" | "QUOTATION", overrideCredit = false, overrideDiscount = false) {
     if (cart.length === 0) { setError("Cart is empty."); return; }
     setBusy(true); setError(null);
     // applied payments capped to the rounded payable (extra cash is change, not applied)
@@ -143,7 +158,8 @@ export default function POS() {
       siteId: customer && siteId ? siteId : null,
       items: cart.map((l) => ({ productId: l.productId, qty: Number(l.qty) || 0, unitPrice: Number(l.unitPrice) || 0, discount: Number(l.discount) || 0 })),
       discount: Number(billDiscount) || 0, tax: Number(tax) || 0, otherCharges: Number(otherCharges) || 0,
-      notes: notes || null, status, payments: applied, overrideCredit,
+      notes: notes || null, status, payments: applied, overrideCredit, overrideDiscount,
+      redeemPoints: customer && Number(redeemPoints) > 0 ? Math.floor(Number(redeemPoints)) : 0,
     };
     try {
       const { sale } = await api<{ sale: Sale }>("/sales", { method: "POST", body });
@@ -152,7 +168,11 @@ export default function POS() {
     } catch (e) {
       const err = e as ApiError;
       if (err.code === "CREDIT_LIMIT_EXCEEDED" && can("sales.discount_over_limit")) {
-        if (window.confirm(`${err.message}\n\nProceed anyway (you have override permission)?`)) { setBusy(false); return submit(status, true); }
+        if (window.confirm(`${err.message}\n\nProceed anyway (you have override permission)?`)) { setBusy(false); return submit(status, true, overrideDiscount); }
+      } else if (err.code === "DISCOUNT_APPROVAL" && can("sales.discount_over_limit")) {
+        if (window.confirm(`${err.message}\n\nApprove this discount (you have override permission)?`)) { setBusy(false); return submit(status, overrideCredit, true); }
+      } else if (err.code === "DISCOUNT_APPROVAL") {
+        setError(`${err.message}. A manager must approve.`);
       } else {
         setError(err.message);
       }
@@ -176,6 +196,20 @@ export default function POS() {
   }, [busy, cart, success, customer, payments, billDiscount, tax, otherCharges, notes]);
 
   useEffect(() => { searchRef.current?.focus(); }, []);
+
+  // G5 — mirror the live cart to a customer-facing 2nd screen (open /pos/display in another window).
+  useEffect(() => {
+    if (typeof BroadcastChannel === "undefined") return;
+    const bc = new BroadcastChannel("pos-display");
+    bc.postMessage({
+      shop: settings?.settings.shop_name || "SoftGlaze",
+      symbol: settings?.settings.currency_symbol || "₨",
+      items: cart.map((l) => ({ name: l.name, qty: Number(l.qty) || 0, price: Number(l.unitPrice) || 0, total: Math.round(((Number(l.qty) || 0) * (Number(l.unitPrice) || 0) - (Number(l.discount) || 0)) * 100) / 100 })),
+      payable,
+      done: success ? { invoiceNo: success.invoiceNo, total: num(success.grandTotal), change } : null,
+    });
+    bc.close();
+  }, [cart, payable, success, settings, change]);
 
   return (
     <div className="h-screen flex flex-col bg-app">
@@ -205,6 +239,18 @@ export default function POS() {
               />
             </div>
           </div>
+          {favProducts.length > 0 && !prodSearch.trim() && (
+            <div className="px-3 pt-2 border-b border-edge">
+              <div className="text-[11px] text-muted mb-1 flex items-center gap-1"><Star size={11} className="text-accent" /> Favourites</div>
+              <div className="flex flex-wrap gap-1.5 pb-2">
+                {favProducts.map((p) => (
+                  <button key={p.id} onClick={() => addProduct(p)} className="px-2.5 py-1 rounded-lg border border-edge bg-surface-2 text-xs hover:border-accent flex items-center gap-1.5">
+                    {p.name} <span className="money text-muted">{fmtMoney(p.salePrice)}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="flex-1 overflow-y-auto p-3 grid grid-cols-2 xl:grid-cols-3 gap-2 content-start">
             {shownProducts.length === 0 ? (
               <div className="col-span-full text-center text-muted py-16">
@@ -213,7 +259,8 @@ export default function POS() {
               </div>
             ) : (
               shownProducts.map((p) => (
-                <button key={p.id} onClick={() => addProduct(p)} className="card p-2.5 text-left hover:border-accent transition-colors flex flex-col gap-1">
+                <button key={p.id} onClick={() => addProduct(p)} className="card p-2.5 text-left hover:border-accent transition-colors flex flex-col gap-1 relative group">
+                  <span role="button" tabIndex={-1} title={favIds.has(p.id) ? "Remove from favourites" : "Add to favourites"} onClick={(e) => { e.stopPropagation(); toggleFav(p.id); }} className={`absolute top-1.5 right-1.5 ${favIds.has(p.id) ? "text-accent" : "text-muted opacity-0 group-hover:opacity-100"}`}><Star size={14} fill={favIds.has(p.id) ? "currentColor" : "none"} /></span>
                   <div className="flex items-center gap-2">
                     {p.images?.[0] ? <img src={p.images[0].thumbPath ?? p.images[0].path} alt="" className="w-8 h-8 rounded object-cover border border-edge" /> : <span className="w-8 h-8 rounded bg-surface-2 border border-edge flex items-center justify-center"><Package size={14} className="text-muted" /></span>}
                     <span className="text-sm font-medium leading-tight line-clamp-2">{p.name}</span>
@@ -292,6 +339,15 @@ export default function POS() {
               <label className="text-muted">Tax<input className="input mono !py-1 text-right mt-0.5" type="number" step="0.01" min="0" value={tax} onChange={(e) => setTax(e.target.value)} /></label>
               <label className="text-muted">Delivery<input className="input mono !py-1 text-right mt-0.5" type="number" step="0.01" min="0" value={otherCharges} onChange={(e) => setOtherCharges(e.target.value)} /></label>
             </div>
+            {customer && loyaltyOn && (customer.loyaltyPoints ?? 0) > 0 && (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted">Redeem points <span className="text-accent">({customer.loyaltyPoints} available)</span></span>
+                <span className="flex items-center gap-1">
+                  <input className="input mono !py-0.5 !w-20 text-right" type="number" min="0" max={maxRedeem} value={redeemPoints} onChange={(e) => setRedeemPoints(e.target.value)} />
+                  {pointsDiscount > 0 && <span className="money text-success text-xs">−{fmtMoney(pointsDiscount)}</span>}
+                </span>
+              </div>
+            )}
             {roundOff !== 0 && (
               <div className="flex items-center justify-between text-sm text-muted">
                 <span>Round off</span><span className="money">{roundOff > 0 ? "+" : ""}{fmtMoney(roundOff)}</span>
@@ -377,6 +433,7 @@ function CustomerBar({ customer, onPick, onQuickAdd }: { customer: SelCustomer; 
             {customer.phone && <span className="mono">{customer.phone}</span>}
             {bal !== 0 && <span className={bal > 0 ? "text-danger ml-2" : "text-success ml-2"}>bal {fmtMoney(customer.balance)}</span>}
             {limit > 0 && <span className="ml-2">limit {fmtMoney(customer.creditLimit)}</span>}
+            {(customer.loyaltyPoints ?? 0) > 0 && <span className="ml-2 text-accent">{customer.loyaltyPoints} pts</span>}
           </div>
         </div>
         <button className="btn btn-secondary !p-2" onClick={() => onPick(null)} title="Walk-in"><X size={15} /></button>
@@ -392,7 +449,7 @@ function CustomerBar({ customer, onPick, onQuickAdd }: { customer: SelCustomer; 
       {q.trim() && (data?.customers.length ?? 0) > 0 && (
         <div className="absolute z-20 mt-1 w-full card max-h-56 overflow-y-auto">
           {data!.customers.map((c) => (
-            <button key={c.id} className="w-full text-left px-3 py-2 text-sm hover:bg-surface-2 flex justify-between" onClick={() => { onPick({ id: c.id, name: c.name, phone: c.phone, balance: c.balance, creditLimit: c.creditLimit }); setQ(""); }}>
+            <button key={c.id} className="w-full text-left px-3 py-2 text-sm hover:bg-surface-2 flex justify-between" onClick={() => { onPick({ id: c.id, name: c.name, phone: c.phone, balance: c.balance, creditLimit: c.creditLimit, loyaltyPoints: c.loyaltyPoints }); setQ(""); }}>
               <span>{c.name} <span className="mono text-muted text-xs">{c.phone}</span></span>
               {num(c.balance) > 0 && <span className="text-danger text-xs">{fmtMoney(c.balance)}</span>}
             </button>
