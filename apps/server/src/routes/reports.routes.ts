@@ -202,7 +202,7 @@ async function computeBalanceSheet() {
     prisma.sale.aggregate({ _sum: { profit: true }, where: { isReturn: true } }),
     prisma.expense.aggregate({ _sum: { amount: true } }),
     prisma.purchase.aggregate({ _sum: { grandTotal: true }, where: { status: "RECEIVED", isReturn: false } }),
-    prisma.purchaseItem.findMany({ where: { purchase: { status: "RECEIVED", isReturn: false } }, select: { qty: true, unitCost: true } }),
+    prisma.purchaseItem.findMany({ where: { purchase: { status: "RECEIVED", isReturn: false } }, select: { qty: true, unitCost: true, landedUnitCost: true } }),
     prisma.stockMovement.findMany({ where: { type: { in: ["ADJUSTMENT_IN", "ADJUSTMENT_OUT", "DAMAGE"] } }, select: { qty: true, unitCost: true } }),
     prisma.employeeAdvance.aggregate({ _sum: { amount: true }, where: { recoveredInId: null } }),
   ]);
@@ -243,8 +243,11 @@ async function computeBalanceSheet() {
 
   const salesNetProfit = r2(num(salesProfit._sum.profit) - num(retProfit._sum.profit));
   const totalExpenses = r2(num(expenseAgg._sum.amount));
-  const inventoryValueAdded = r2(purItems.reduce((s, it) => s + num(it.qty) * num(it.unitCost), 0));
-  const purchaseGap = r2(num(purAgg._sum.grandTotal) - inventoryValueAdded); // freight + tax − discounts on bills
+  // C2 — value capitalised into stock uses the LANDED cost (billed + allocated freight)
+  // when a purchase allocated it; otherwise the billed unitCost. So freight that was
+  // allocated is inventory (not a gap), and freight left un-allocated stays expensed here.
+  const inventoryValueAdded = r2(purItems.reduce((s, it) => s + num(it.qty) * num(it.landedUnitCost ?? it.unitCost), 0));
+  const purchaseGap = r2(num(purAgg._sum.grandTotal) - inventoryValueAdded); // un-allocated freight + tax − discounts on bills
   const adjustmentValue = r2(adjMoves.reduce((s, m) => s + num(m.qty) * num(m.unitCost), 0));
   const revaluation = r2(stockValue - flowInventoryValue); // manual cost edits + rounding
   const retainedEarnings = r2(salesNetProfit - totalExpenses - purchaseGap + adjustmentValue + revaluation);

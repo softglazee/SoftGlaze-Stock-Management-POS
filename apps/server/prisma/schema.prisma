@@ -306,6 +306,10 @@ model Purchase {
   discount     Decimal        @default(0) @db.Decimal(18, 2)
   tax          Decimal        @default(0) @db.Decimal(18, 2)
   otherCharges Decimal        @default(0) @db.Decimal(18, 2) // freight/loading
+  // C2 — how otherCharges was spread onto item cost: NONE (expensed, old behaviour),
+  // VALUE (by line value) or QTY (by quantity). When not NONE, each item's landedUnitCost
+  // carries its freight share so inventory/COGS reflect the true landed cost.
+  landedBasis  String         @default("NONE")
   grandTotal   Decimal        @default(0) @db.Decimal(18, 2)
   paidAmount   Decimal        @default(0) @db.Decimal(18, 2)
   dueAmount    Decimal        @default(0) @db.Decimal(18, 2)
@@ -322,15 +326,16 @@ model Purchase {
 }
 
 model PurchaseItem {
-  id         String   @id @default(cuid())
-  purchaseId String
-  purchase   Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
-  productId  String
-  product    Product  @relation(fields: [productId], references: [id])
-  qty        Decimal  @db.Decimal(18, 3)
-  unitCost   Decimal  @db.Decimal(18, 2)
-  discount   Decimal  @default(0) @db.Decimal(18, 2)
-  total      Decimal  @db.Decimal(18, 2)
+  id             String   @id @default(cuid())
+  purchaseId     String
+  purchase       Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  productId      String
+  product        Product  @relation(fields: [productId], references: [id])
+  qty            Decimal  @db.Decimal(18, 3)
+  unitCost       Decimal  @db.Decimal(18, 2)                 // billed unit cost (matches the vendor invoice line)
+  landedUnitCost Decimal? @db.Decimal(18, 2)                 // C2 — unitCost + allocated freight share; the cost capitalised into stock. Null = same as unitCost.
+  discount       Decimal  @default(0) @db.Decimal(18, 2)
+  total          Decimal  @db.Decimal(18, 2)
 }
 
 // ─────────────────────────── SALES / POS ───────────────────────────

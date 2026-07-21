@@ -32,6 +32,9 @@ const createSchema = z.object({
   discount: z.coerce.number().min(0).default(0),
   tax: z.coerce.number().min(0).default(0),
   otherCharges: z.coerce.number().min(0).default(0),
+  // C2 — spread otherCharges (freight/duty/loading) into each item's landed cost.
+  // NONE = expense it (old behaviour); VALUE = by line value; QTY = by quantity.
+  landedBasis: z.enum(["NONE", "VALUE", "QTY"]).default("NONE"),
   notes: z.string().trim().max(1000).nullable().optional(),
   payments: z.array(paymentSchema).optional(),
 });
@@ -125,6 +128,38 @@ router.post("/", requirePermission("purchases.create"), async (req, res, next) =
     if (paidAmount > grandTotal) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: "Paid amount is more than the purchase total" } });
     const dueAmount = round2(grandTotal - paidAmount);
 
+    // C2 — landed-cost allocation. Spread otherCharges (freight/duty/loading) across the
+    // items so each carries its share in `landedUnitCost` — that's the cost capitalised
+    // into stock (weighted-avg + StockMovement), so inventory value and COGS reflect the
+    // TRUE landed cost. The document math (subTotal/grandTotal) is untouched, and the last
+    // line absorbs any rounding so Σ allocated == otherCharges exactly. Basis NONE keeps
+    // the old behaviour (freight expensed via the balance sheet's purchaseGap term).
+    const freightPool = round2(body.otherCharges);
+    const allocate = body.landedBasis !== "NONE" && freightPool > 0;
+    const grossVals = body.items.map((l) => round2(l.qty * l.unitCost));
+    const totalGross = round2(grossVals.reduce((s, v) => s + v, 0));
+    const totalQty = body.items.reduce((s, l) => s + l.qty, 0);
+    const n = body.items.length;
+    const allocated = new Array(n).fill(0);
+    if (allocate) {
+      let acc = 0;
+      for (let i = 0; i < n; i++) {
+        if (i === n - 1) {
+          allocated[i] = round2(freightPool - acc); // last line takes the remainder → exact
+        } else {
+          const w =
+            body.landedBasis === "QTY"
+              ? (totalQty > 0 ? body.items[i].qty / totalQty : 1 / n)
+              : (totalGross > 0 ? grossVals[i] / totalGross : 1 / n);
+          allocated[i] = round2(freightPool * w);
+          acc = round2(acc + allocated[i]);
+        }
+      }
+    }
+    // per-unit landed cost = billed unit cost + this line's freight share ÷ qty
+    const landedUnit = body.items.map((l, i) => (l.qty > 0 ? round2(l.unitCost + allocated[i] / l.qty) : round2(l.unitCost)));
+    const landedBasisStored = allocate ? body.landedBasis : "NONE";
+
     const purchase = await prisma.$transaction(async (tx) => {
       const invoiceNo = await nextNumber(tx, "purchase", "PUR");
       const created = await tx.purchase.create({
@@ -139,6 +174,7 @@ router.post("/", requirePermission("purchases.create"), async (req, res, next) =
           discount: money(body.discount),
           tax: money(body.tax),
           otherCharges: money(body.otherCharges),
+          landedBasis: landedBasisStored,
           grandTotal: money(grandTotal),
           paidAmount: money(paidAmount),
           dueAmount: money(dueAmount),
@@ -147,14 +183,24 @@ router.post("/", requirePermission("purchases.create"), async (req, res, next) =
       });
 
       for (const [i, line] of body.items.entries()) {
+        // C2 — cost capitalised into stock = the LANDED unit cost (billed + freight share).
+        const capitalisedCost = landedUnit[i];
         await tx.purchaseItem.create({
-          data: { purchaseId: created.id, productId: line.productId, qty: new Prisma.Decimal(line.qty), unitCost: money(line.unitCost), discount: money(line.discount), total: money(lineTotals[i]) },
+          data: {
+            purchaseId: created.id,
+            productId: line.productId,
+            qty: new Prisma.Decimal(line.qty),
+            unitCost: money(line.unitCost),
+            landedUnitCost: allocate ? money(capitalisedCost) : null,
+            discount: money(line.discount),
+            total: money(lineTotals[i]),
+          },
         });
         // weighted-average cost (read fresh in-tx so repeated products chain correctly)
         const cur = await tx.product.findUnique({ where: { id: line.productId }, select: { stockQty: true, costPrice: true } });
-        const newAvg = weightedAvg(cur!.stockQty, cur!.costPrice, line.qty, line.unitCost);
+        const newAvg = weightedAvg(cur!.stockQty, cur!.costPrice, line.qty, capitalisedCost);
         await tx.product.update({ where: { id: line.productId }, data: { costPrice: newAvg } });
-        await applyMovement(tx, { productId: line.productId, type: "PURCHASE", qty: line.qty, unitCost: money(line.unitCost), refType: "PURCHASE", refId: created.id, notes: `Purchase ${invoiceNo}` });
+        await applyMovement(tx, { productId: line.productId, type: "PURCHASE", qty: line.qty, unitCost: money(capitalisedCost), refType: "PURCHASE", refId: created.id, notes: `Purchase ${invoiceNo}` });
       }
 
       // Vendor payable increases by the unpaid portion

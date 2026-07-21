@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { Plus, Search, X, Eye, Undo2, MessageCircle } from "lucide-react";
 import { api, ApiError } from "../lib/api";
-import { Purchase, Vendor, Product, PaymentMethod, Paged } from "../lib/types";
+import { Purchase, Vendor, Product, PaymentMethod, Paged, LandedBasis } from "../lib/types";
 import { num, fmtMoney, fmtQty } from "../lib/format";
 import { waLink } from "../lib/phone";
 import { useAuth } from "../context/AuthContext";
@@ -119,6 +119,7 @@ function NewPurchase({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
   const [discount, setDiscount] = useState("0");
   const [tax, setTax] = useState("0");
   const [otherCharges, setOtherCharges] = useState("0");
+  const [landedBasis, setLandedBasis] = useState<LandedBasis>("VALUE"); // C2 — default: capitalise freight by line value
   const [methodId, setMethodId] = useState("");
   const [paidAmount, setPaidAmount] = useState("0");
   const [notes, setNotes] = useState("");
@@ -137,6 +138,31 @@ function NewPurchase({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
   const paid = Number(paidAmount) || 0;
   const due = grand - paid;
 
+  // C2 — live landed-cost preview (mirrors the server allocation of freight into item cost)
+  const r2 = (v: number) => Math.round(v * 100) / 100;
+  const freightPool = r2(Number(otherCharges) || 0);
+  const allocateOn = landedBasis !== "NONE" && freightPool > 0 && lines.length > 0;
+  const grossVals = lines.map((l) => r2((Number(l.qty) || 0) * (Number(l.unitCost) || 0)));
+  const totalGross = r2(grossVals.reduce((s, v) => s + v, 0));
+  const totalQty = lines.reduce((s, l) => s + (Number(l.qty) || 0), 0);
+  const allocated = lines.map(() => 0);
+  if (allocateOn) {
+    let acc = 0;
+    for (let i = 0; i < lines.length; i++) {
+      if (i === lines.length - 1) { allocated[i] = r2(freightPool - acc); }
+      else {
+        const w = landedBasis === "QTY"
+          ? (totalQty > 0 ? (Number(lines[i].qty) || 0) / totalQty : 1 / lines.length)
+          : (totalGross > 0 ? grossVals[i] / totalGross : 1 / lines.length);
+        allocated[i] = r2(freightPool * w); acc = r2(acc + allocated[i]);
+      }
+    }
+  }
+  const landedUnits = lines.map((l, i) => {
+    const qtyN = Number(l.qty) || 0, costN = Number(l.unitCost) || 0;
+    return allocateOn && qtyN > 0 ? r2(costN + allocated[i] / qtyN) : costN;
+  });
+
   function addLine(p: Product) {
     if (p.type !== "STANDARD") { toast(`${p.name} is a ${p.type.toLowerCase()} item — not stockable`, "error"); return; }
     if (lines.some((l) => l.productId === p.id)) { setProdSearch(""); return; }
@@ -154,6 +180,7 @@ function NewPurchase({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
         discount: Number(discount) || 0,
         tax: Number(tax) || 0,
         otherCharges: Number(otherCharges) || 0,
+        landedBasis,
         notes: notes || null,
         payments: paid > 0 && methodId ? [{ methodId, amount: paid }] : [],
       };
@@ -236,6 +263,9 @@ function NewPurchase({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
                       <td className="px-3 py-1.5">
                         <input className="input mono !py-1 text-right" type="number" step="0.01" min="0" value={l.unitCost}
                           onChange={(e) => setLines(lines.map((x, idx) => idx === i ? { ...x, unitCost: e.target.value } : x))} />
+                        {allocateOn && landedUnits[i] !== (Number(l.unitCost) || 0) && (
+                          <div className="text-[10px] text-accent mono text-right mt-0.5" title="Cost including its freight share (goes into stock value & profit)">landed {fmtMoney(landedUnits[i])}</div>
+                        )}
                       </td>
                       <td className="px-3 py-1.5 text-right money">{fmtMoney((Number(l.qty) || 0) * (Number(l.unitCost) || 0))}</td>
                       <td className="px-3 py-1.5">
@@ -264,6 +294,19 @@ function NewPurchase({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
               <span className="text-sm text-muted">Freight / loading</span>
               <input className="input mono !w-32 !py-1 text-right" type="number" step="0.01" min="0" value={otherCharges} onChange={(e) => setOtherCharges(e.target.value)} />
             </div>
+            {freightPool > 0 && (
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm text-muted" title="Spread freight into each item's cost so stock value & profit are accurate (landed cost)">Add freight to cost</span>
+                <select className="input !w-32 !py-1 text-sm" value={landedBasis} onChange={(e) => setLandedBasis(e.target.value as LandedBasis)}>
+                  <option value="VALUE">By value</option>
+                  <option value="QTY">By quantity</option>
+                  <option value="NONE">No (expense)</option>
+                </select>
+              </div>
+            )}
+            {allocateOn && (
+              <p className="text-[11px] text-muted">Freight ₨{freightPool.toLocaleString()} is spread into each item's cost — stock value & profit use the landed cost. Turn off to book it as a straight expense.</p>
+            )}
           </div>
           <div className="space-y-2">
             <div className="flex items-center justify-between"><span className="text-sm text-muted">Sub-total</span><span className="money">{fmtMoney(subTotal)}</span></div>
@@ -345,7 +388,12 @@ function ViewPurchase({ purchase, onClose, onReturned }: { purchase: Purchase; o
                 <tr key={it.id} className="border-b border-edge last:border-0">
                   <td className="px-3 py-1.5">{it.product?.name} <span className="mono text-muted text-xs">{it.product?.sku}</span></td>
                   <td className="px-3 py-1.5 text-right mono">{fmtQty(it.qty)} {it.product?.unit?.shortName}</td>
-                  <td className="px-3 py-1.5 text-right money">{fmtMoney(it.unitCost)}</td>
+                  <td className="px-3 py-1.5 text-right money">
+                    {fmtMoney(it.unitCost)}
+                    {it.landedUnitCost && num(it.landedUnitCost) !== num(it.unitCost) && (
+                      <div className="text-[10px] text-accent mono" title="Cost including freight share (used for stock value & profit)">landed {fmtMoney(it.landedUnitCost)}</div>
+                    )}
+                  </td>
                   <td className="px-3 py-1.5 text-right money">{fmtMoney(it.total)}</td>
                   {returnMode && (
                     <td className="px-3 py-1.5">
@@ -365,6 +413,14 @@ function ViewPurchase({ purchase, onClose, onReturned }: { purchase: Purchase; o
           <div><span className="text-muted">Paid</span><div className="money">{fmtMoney(p.paidAmount)}</div></div>
           <div><span className="text-muted">Due</span><div className={`money ${num(p.dueAmount) > 0 ? "text-danger" : ""}`}>{fmtMoney(p.dueAmount)}</div></div>
         </div>
+        {num(p.otherCharges) > 0 && (
+          <p className="text-xs text-muted">
+            Freight/loading {fmtMoney(p.otherCharges)}
+            {p.landedBasis && p.landedBasis !== "NONE"
+              ? ` — added to item cost (landed, by ${p.landedBasis === "QTY" ? "quantity" : "value"}).`
+              : " — booked as an expense (not in item cost)."}
+          </p>
+        )}
 
         {error && <p className="text-danger text-sm">{error}</p>}
 

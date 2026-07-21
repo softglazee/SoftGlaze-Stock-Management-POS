@@ -136,9 +136,11 @@ export type PurchaseItem = {
   product?: { id: string; name: string; sku: string; unit?: { shortName: string } };
   qty: string;
   unitCost: string;
+  landedUnitCost?: string | null; // C2 — billed + allocated freight (null = no allocation)
   discount: string;
   total: string;
 };
+export type LandedBasis = "NONE" | "VALUE" | "QTY";
 export type PurchasePayment = { id: string; amount: string; method?: { name: string } };
 export type PurchaseStatus = "DRAFT" | "RECEIVED" | "RETURNED" | "CANCELLED";
 export type Purchase = {
@@ -154,6 +156,7 @@ export type Purchase = {
   discount: string;
   tax: string;
   otherCharges: string;
+  landedBasis?: LandedBasis; // C2 — how otherCharges was capitalised into item cost
   grandTotal: string;
   paidAmount: string;
   dueAmount: string;

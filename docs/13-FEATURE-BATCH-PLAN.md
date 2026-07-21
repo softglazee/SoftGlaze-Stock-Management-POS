@@ -97,5 +97,6 @@ Effort key: **S** ≈ half-day · **M** ≈ 1–2 days · **L** ≈ 3+ days.
 - [x] **A5 Round-off setting** — DONE (migration `a5_sale_roundoff`; `Sale.roundOff` folds into grandTotal; integrity invariant updated; 13/13 checks). **✅ Batch A COMPLETE.**
 - [x] **B1 Cash denomination counter** + **B2 Day-close / Z-report** — DONE as one module (migration `b_day_close`; `DayClose` model + Day Close page + 80mm Z-report; 11/11 checks; posts nothing → integrity-safe).
 - [x] **C1 Rod/sheet weight & length calculator** — DONE (migration `c1_weight_calc`; `WeightCalc` enum + Product weight-profile fields; `lib/weight.ts` pure math + `POST /tools/weight-calc`; POS ⚖ line button + standalone Weight Calc page + Products weight-profile section; 22/22 checks; pure calculator → zero accounting effect; 4 real-DB sariya products profiled for testing).
-- [ ] C2 Landed-cost allocation — **next**
-- [ ] C3 … (remaining, in the order above)
+- [x] **C2 Landed-cost allocation** — DONE (migration `c2_landed_cost`; `PurchaseItem.landedUnitCost` + `Purchase.landedBasis`). Freight/duty (otherCharges) is spread across items by value or quantity and capitalised into `landedUnitCost` → weighted-avg cost + StockMovement, so inventory value & COGS reflect the true landed cost. Document math (subTotal/grandTotal) untouched; basis NONE keeps the old "expense it" behaviour. Balance sheet's `inventoryValueAdded` now uses landedUnitCost; purchase returns unchanged (the `revaluation` term auto-recognises freight-on-returned-goods as a loss). 25/25 checks — integrity all-green + balance sheet ₨0 through purchase (value/qty/none), sale (COGS=landed), and partial return.
+- [ ] C3 Contractor rate contracts — **next**
+- [ ] C4 … (remaining, in the order above)
