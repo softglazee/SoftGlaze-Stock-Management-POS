@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
-import { Plus, Pencil, Trash2, Users, Upload, FileText, HandCoins } from "lucide-react";
+import { Plus, Pencil, Trash2, Users, Upload, FileText, HandCoins, MapPin } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import { Customer, Paged, PriceGroup } from "../lib/types";
 import { num, fmtMoney } from "../lib/format";
@@ -18,6 +18,7 @@ import {
 } from "../components/ui";
 import ImportWizard from "../components/ImportWizard";
 import LedgerModal from "../components/LedgerModal";
+import CustomerSitesModal from "../components/CustomerSitesModal";
 import { PaymentModal } from "./Payments";
 
 type FormState = {
@@ -43,6 +44,7 @@ export default function Customers() {
   const [importing, setImporting] = useState(false);
   const [ledgerFor, setLedgerFor] = useState<Customer | null>(null);
   const [receiveFor, setReceiveFor] = useState<Customer | null>(null);
+  const [sitesFor, setSitesFor] = useState<Customer | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [error, setError] = useState<string | null>(null);
 
@@ -220,6 +222,9 @@ export default function Customers() {
                           <button className="btn btn-secondary !p-1.5" onClick={() => setLedgerFor(c)} title={`Statement for ${c.name}`}>
                             <FileText size={14} />
                           </button>
+                          <button className="btn btn-secondary !p-1.5" onClick={() => setSitesFor(c)} title={`Sites for ${c.name}`}>
+                            <MapPin size={14} />
+                          </button>
                           {can("payments.receive") && (
                             <button className="btn btn-secondary !p-1.5 hover:!text-accent" onClick={() => setReceiveFor(c)} title={`Receive payment from ${c.name}`}>
                               <HandCoins size={14} />
@@ -349,6 +354,7 @@ export default function Customers() {
       <ImportWizard entity="customers" open={importing} onClose={() => setImporting(false)} onDone={() => qc.invalidateQueries({ queryKey: ["customers"] })} />
 
       {ledgerFor && <LedgerModal kind="customer" id={ledgerFor.id} name={ledgerFor.name} onClose={() => setLedgerFor(null)} />}
+      {sitesFor && <CustomerSitesModal customer={{ id: sitesFor.id, name: sitesFor.name }} onClose={() => setSitesFor(null)} />}
       {receiveFor && (
         <PaymentModal
           mode="receive"

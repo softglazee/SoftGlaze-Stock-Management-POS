@@ -87,6 +87,7 @@ const receiptSchema = z.object({
   methodId: z.string().min(1, "Pick where the money went"),
   amount: z.coerce.number().positive("Amount must be more than 0"),
   saleId: z.string().min(1).nullable().optional(), // allocate this receipt to one specific invoice
+  siteId: z.string().min(1).nullable().optional(), // C4 — allocate this receipt to a customer site
   date: z.coerce.date().optional(),
   notes: z.string().trim().max(300).nullable().optional(),
 });
@@ -101,18 +102,24 @@ router.post("/customer-receipt", requirePermission("payments.receive"), async (r
     const method = await prisma.paymentMethod.findUnique({ where: { id: body.methodId }, select: { id: true } });
     if (!method) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: "Unknown account" } });
 
-    // Optional allocation to one invoice.
-    let sale: { id: string; invoiceNo: string; dueAmount: Prisma.Decimal } | null = null;
+    // Optional allocation to one invoice. C4 — a receipt allocated to an invoice inherits
+    // that invoice's site; otherwise the caller may tag a site directly.
+    let sale: { id: string; invoiceNo: string; dueAmount: Prisma.Decimal; siteId: string | null } | null = null;
     if (body.saleId) {
-      const s = await prisma.sale.findUnique({ where: { id: body.saleId }, select: { id: true, invoiceNo: true, customerId: true, status: true, isReturn: true, dueAmount: true } });
+      const s = await prisma.sale.findUnique({ where: { id: body.saleId }, select: { id: true, invoiceNo: true, customerId: true, status: true, isReturn: true, dueAmount: true, siteId: true } });
       if (!s || s.isReturn || s.customerId !== customer.id) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: "That bill does not belong to this customer" } });
       if (s.status !== "COMPLETED" || Number(s.dueAmount) <= 0) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: "That bill has nothing outstanding" } });
       if (body.amount > Number(s.dueAmount) + 0.01) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: `That bill only has ₨${s.dueAmount} outstanding — receive the rest against the balance instead` } });
-      sale = { id: s.id, invoiceNo: s.invoiceNo, dueAmount: s.dueAmount };
+      sale = { id: s.id, invoiceNo: s.invoiceNo, dueAmount: s.dueAmount, siteId: s.siteId };
+    }
+    let siteId = sale ? sale.siteId : body.siteId || null;
+    if (siteId && !sale) {
+      const site = await prisma.customerSite.findUnique({ where: { id: siteId }, select: { customerId: true } });
+      if (!site || site.customerId !== customer.id) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: "That site does not belong to this customer" } });
     }
 
     const payment = await prisma.$transaction(async (tx) => {
-      const created = await postPayment(tx, { type: "CUSTOMER_RECEIPT", methodId: body.methodId, amount: body.amount, customerId: customer.id, saleId: sale?.id ?? null, userId: req.user!.id, notes: body.notes || (sale ? `Receipt for ${sale.invoiceNo}` : `Receipt from ${customer.name}`), date: body.date });
+      const created = await postPayment(tx, { type: "CUSTOMER_RECEIPT", methodId: body.methodId, amount: body.amount, customerId: customer.id, saleId: sale?.id ?? null, siteId, userId: req.user!.id, notes: body.notes || (sale ? `Receipt for ${sale.invoiceNo}` : `Receipt from ${customer.name}`), date: body.date });
       await tx.customer.update({ where: { id: customer.id }, data: { balance: { decrement: money(body.amount) } } });
       if (sale) await tx.sale.update({ where: { id: sale.id }, data: { paidAmount: { increment: money(body.amount) }, dueAmount: { decrement: money(body.amount) } } });
       await tx.auditLog.create({ data: { userId: req.user!.id, action: "CUSTOMER_RECEIPT", entity: "Payment", entityId: created.id, details: `${created.refNo} · ${customer.name} · ₨${body.amount}${sale ? ` · ${sale.invoiceNo}` : ""}` } });

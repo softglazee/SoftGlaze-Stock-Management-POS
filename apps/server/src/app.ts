@@ -10,6 +10,7 @@ import categoryRoutes from "./routes/categories.routes";
 import settingRoutes from "./routes/settings.routes";
 import productRoutes from "./routes/products.routes";
 import customerRoutes from "./routes/customers.routes";
+import customerSiteRoutes from "./routes/customer-sites.routes";
 import vendorRoutes from "./routes/vendors.routes";
 import priceGroupRoutes from "./routes/price-groups.routes";
 import rateContractRoutes from "./routes/rate-contracts.routes";
@@ -70,6 +71,7 @@ app.use("/api/v1/categories", categoryRoutes);   // Phase 1
 app.use("/api/v1/settings", settingRoutes);      // Phase 1 (presets) — grows in Phase 6
 app.use("/api/v1/products", productRoutes);      // Phase 1
 app.use("/api/v1/customers", customerRoutes);    // Phase 1
+app.use("/api/v1/customer-sites", customerSiteRoutes); // C4 (site-wise sub-ledgers)
 app.use("/api/v1/vendors", vendorRoutes);        // Phase 1
 app.use("/api/v1/price-groups", priceGroupRoutes); // F6 (customer price groups)
 app.use("/api/v1/rate-contracts", rateContractRoutes); // C3 (contractor rate contracts)

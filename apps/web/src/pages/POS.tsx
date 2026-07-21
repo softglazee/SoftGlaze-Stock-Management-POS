@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Search, X, Plus, Trash2, UserPlus, ArrowLeft, Pause, FileText, CheckCircle2, Printer, Package, Scale, FileSignature } from "lucide-react";
+import { Search, X, Plus, Trash2, UserPlus, ArrowLeft, Pause, FileText, CheckCircle2, Printer, Package, Scale, FileSignature, MapPin } from "lucide-react";
 import { api, ApiError } from "../lib/api";
-import { Product, Customer, PaymentMethod, Sale, WeightCalc, RateResolution } from "../lib/types";
+import { Product, Customer, PaymentMethod, Sale, WeightCalc, RateResolution, SiteBalancesView } from "../lib/types";
 import { num, fmtMoney, fmtQty } from "../lib/format";
 import { useAuth } from "../context/AuthContext";
 import { useToast, Modal, Badge } from "../components/ui";
@@ -38,6 +38,7 @@ export default function POS() {
   const [showQuotes, setShowQuotes] = useState(false);
   const [quickAdd, setQuickAdd] = useState<{ name: string; phone: string } | null>(null);
   const [calcLine, setCalcLine] = useState<number | null>(null); // C1 — which cart line has the weight calculator open
+  const [siteId, setSiteId] = useState(""); // C4 — customer site this sale is for
   const searchRef = useRef<HTMLInputElement>(null);
 
   const { data: settings } = useQuery({ queryKey: ["settings"], queryFn: () => api<{ settings: Record<string, string> }>("/settings") });
@@ -59,6 +60,14 @@ export default function POS() {
   });
   const rateMap = useMemo(() => new Map((rateData?.rates ?? []).map((r) => [r.productId, r.price])), [rateData]);
   const activeContract = customer && rateData?.primary ? rateData.primary : null;
+  // C4 — the selected customer's sites, to tag this sale to a site/project.
+  const { data: siteData } = useQuery({
+    queryKey: ["pos-sites", customer?.id],
+    queryFn: () => api<SiteBalancesView>(`/customer-sites?customerId=${customer!.id}`),
+    enabled: !!customer?.id,
+    staleTime: 60_000,
+  });
+  const customerSites = (siteData?.sites ?? []).filter((s) => s.isActive);
   const methods = methodData?.methods ?? [];
   const cashMethodId = methods.find((m) => m.isCash)?.id ?? methods[0]?.id ?? "";
 
@@ -93,6 +102,9 @@ export default function POS() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customer?.id, rateData]);
 
+  // C4 — clear the site tag whenever the customer changes.
+  useEffect(() => { setSiteId(""); }, [customer?.id]);
+
   function addProduct(p: Product) {
     setProdSearch("");
     setCart((c) => {
@@ -112,7 +124,7 @@ export default function POS() {
   function removeLine(i: number) { setCart((c) => c.filter((_, idx) => idx !== i)); }
   function resetSale() {
     setCart([]); setCustomer(null); setBillDiscount("0"); setTax("0"); setOtherCharges("0");
-    setPayments([]); setPayTouched(false); setNotes(""); setError(null); setSuccess(null);
+    setPayments([]); setPayTouched(false); setNotes(""); setError(null); setSuccess(null); setSiteId("");
     setTimeout(() => searchRef.current?.focus(), 50);
   }
 
@@ -128,6 +140,7 @@ export default function POS() {
       : [];
     const body: Record<string, unknown> = {
       customerId: customer?.id ?? null,
+      siteId: customer && siteId ? siteId : null,
       items: cart.map((l) => ({ productId: l.productId, qty: Number(l.qty) || 0, unitPrice: Number(l.unitPrice) || 0, discount: Number(l.discount) || 0 })),
       discount: Number(billDiscount) || 0, tax: Number(tax) || 0, otherCharges: Number(otherCharges) || 0,
       notes: notes || null, status, payments: applied, overrideCredit,
@@ -223,6 +236,15 @@ export default function POS() {
             {activeContract && (
               <div className="mt-2 text-xs text-accent bg-accent/10 border border-accent/30 rounded px-2 py-1 flex items-center gap-1.5">
                 <FileSignature size={12} /> Contract {activeContract.refNo} — agreed rates apply (until {new Date(activeContract.validUntil).toLocaleDateString("en-GB")})
+              </div>
+            )}
+            {customer && customerSites.length > 0 && (
+              <div className="mt-2 flex items-center gap-2">
+                <MapPin size={14} className="text-muted shrink-0" />
+                <select className="input !py-1 text-sm" value={siteId} onChange={(e) => setSiteId(e.target.value)} title="Tag this sale to a site/project">
+                  <option value="">No specific site</option>
+                  {customerSites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
               </div>
             )}
           </div>

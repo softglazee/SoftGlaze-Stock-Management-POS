@@ -111,6 +111,12 @@ export type Customer = {
   isActive: boolean;
 };
 
+// ── Customer sites / site-wise sub-ledgers (C4) ──
+export type CustomerSite = { id: string; customerId: string; name: string; address: string | null; isActive: boolean; createdAt?: string };
+export type CustomerSiteBalance = CustomerSite & { balance: number };
+export type SiteBalancesView = { sites: CustomerSiteBalance[]; unassigned: number; total: number; customerBalance: number; reconciles: boolean };
+export type SiteLedger = { site: CustomerSite; customer: { id: string; code: string; name: string; phone: string | null }; opening: number; closing: number; totalDebit: number; totalCredit: number; entries: { date: string; refNo: string; type: string; description: string; debit: number; credit: number; balance: number }[] };
+
 // ── Price groups (F6) ──
 export type PriceGroupItem = { id: string; productId: string; product?: { id: string; name: string; sku: string; salePrice: string }; price: string };
 export type PriceGroup = { id: string; name: string; discountPercent: string; sortOrder: number; isActive: boolean; items: PriceGroupItem[]; _count?: { customers: number } };
@@ -203,6 +209,8 @@ export type Sale = {
   invoiceNo: string;
   customerId: string | null;
   customer?: { id: string; code: string; name: string; phone: string | null } | null;
+  siteId?: string | null;
+  site?: { id: string; name: string } | null;
   user?: { id: string; name: string };
   date: string;
   status: SaleStatus;

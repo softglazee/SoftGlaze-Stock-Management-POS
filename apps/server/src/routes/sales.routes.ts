@@ -33,6 +33,7 @@ const lineSchema = z.object({
 const paymentSchema = z.object({ methodId: z.string().min(1), amount: z.coerce.number().positive() });
 const createSchema = z.object({
   customerId: z.string().nullable().optional(),
+  siteId: z.string().nullable().optional(), // C4 — customer site/project this invoice is for
   date: z.coerce.date().optional(),
   status: z.enum(["COMPLETED", "DRAFT", "QUOTATION"]).default("COMPLETED"),
   items: z.array(lineSchema).min(1, "Add at least one item"),
@@ -48,6 +49,7 @@ const productForSale = { comboItems: { include: { componentProduct: { select: { 
 
 const saleInclude = {
   customer: { select: { id: true, code: true, name: true, phone: true } },
+  site: { select: { id: true, name: true } },
   user: { select: { id: true, name: true } },
   items: { include: { product: { select: { id: true, name: true, sku: true, type: true, unit: { select: { shortName: true } } } } } },
   payments: { include: { method: { select: { name: true } } } },
@@ -155,6 +157,14 @@ router.post("/", requirePermission("sales.create"), async (req, res, next) => {
       customer = c;
     }
 
+    // C4 — a site tag must belong to this sale's customer.
+    const siteId = body.siteId || null;
+    if (siteId) {
+      if (!customer) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: "Pick a customer before tagging a site" } });
+      const site = await prisma.customerSite.findUnique({ where: { id: siteId }, select: { customerId: true } });
+      if (!site || site.customerId !== customer.id) return res.status(400).json({ ok: false, error: { code: "VALIDATION", message: "That site does not belong to this customer" } });
+    }
+
     // Products (+ combo components) and per-line cost snapshot
     const ids = [...new Set(body.items.map((i) => i.productId))];
     const products = await prisma.product.findMany({ where: { id: { in: ids } }, include: productForSale });
@@ -194,7 +204,7 @@ router.post("/", requirePermission("sales.create"), async (req, res, next) => {
         const invoiceNo = await nextNumber(tx, body.status === "DRAFT" ? "hold" : "quotation", body.status === "DRAFT" ? "HLD" : "QUO");
         const created = await tx.sale.create({
           data: {
-            invoiceNo, customerId: customer?.id ?? null, userId: req.user!.id, status: body.status, ...(body.date ? { date: body.date } : {}),
+            invoiceNo, customerId: customer?.id ?? null, siteId, userId: req.user!.id, status: body.status, ...(body.date ? { date: body.date } : {}),
             subTotal: money(subTotal), discount: money(body.discount), tax: money(body.tax), otherCharges: money(body.otherCharges), roundOff: money(roundOff),
             grandTotal: money(grandTotal), paidAmount: money(0), dueAmount: money(0), totalCost: money(totalCost), profit: money(profit), notes: body.notes || null,
           },
@@ -239,7 +249,7 @@ router.post("/", requirePermission("sales.create"), async (req, res, next) => {
       const invoiceNo = await nextNumber(tx, "sale", "INV");
       const created = await tx.sale.create({
         data: {
-          invoiceNo, customerId: customer?.id ?? null, userId: req.user!.id, status: "COMPLETED", ...(body.date ? { date: body.date } : {}),
+          invoiceNo, customerId: customer?.id ?? null, siteId, userId: req.user!.id, status: "COMPLETED", ...(body.date ? { date: body.date } : {}),
           subTotal: money(subTotal), discount: money(body.discount), tax: money(body.tax), otherCharges: money(body.otherCharges), roundOff: money(roundOff),
           grandTotal: money(grandTotal), paidAmount: money(paidAmount), dueAmount: money(dueAmount), totalCost: money(totalCost), profit: money(profit), notes: body.notes || null,
         },
@@ -258,7 +268,7 @@ router.post("/", requirePermission("sales.create"), async (req, res, next) => {
       }
       if (customer && dueAmount > 0) await tx.customer.update({ where: { id: customer.id }, data: { balance: { increment: money(dueAmount) } } });
       for (const p of body.payments ?? []) {
-        await postPayment(tx, { type: "SALE_RECEIPT", methodId: p.methodId, amount: p.amount, customerId: customer?.id ?? null, saleId: created.id, userId: req.user!.id, notes: `Sale ${invoiceNo}` });
+        await postPayment(tx, { type: "SALE_RECEIPT", methodId: p.methodId, amount: p.amount, customerId: customer?.id ?? null, saleId: created.id, siteId, userId: req.user!.id, notes: `Sale ${invoiceNo}` });
       }
       await tx.auditLog.create({ data: { userId: req.user!.id, action: "CREATE_SALE", entity: "Sale", entityId: created.id, details: `${invoiceNo} · ₨${grandTotal}${dueAmount > 0 ? ` · udhaar ₨${dueAmount}` : ""}` } });
       return created;
@@ -336,7 +346,7 @@ router.post("/:id/return", requirePermission("sales.return"), async (req, res, n
       const invoiceNo = await nextNumber(tx, "sale_return", "SRET");
       const doc = await tx.sale.create({
         data: {
-          invoiceNo, customerId: original.customerId, userId: req.user!.id, status: "RETURNED", isReturn: true, returnOfId: original.id,
+          invoiceNo, customerId: original.customerId, siteId: original.siteId, userId: req.user!.id, status: "RETURNED", isReturn: true, returnOfId: original.id,
           subTotal: money(returnValue), grandTotal: money(returnValue), paidAmount: money(0), dueAmount: money(0), totalCost: money(returnCost), profit: money(round2(returnValue - returnCost)), notes: body.notes || `Return of ${original.invoiceNo}`,
         },
       });
@@ -358,7 +368,7 @@ router.post("/:id/return", requirePermission("sales.return"), async (req, res, n
       // Optional cash/bank refund out. Paying cash settles that credit, so it offsets
       // the receivable back — net balance change is zero when refunded in cash.
       if (body.refundMethodId) {
-        await postPayment(tx, { type: "REFUND_OUT", methodId: body.refundMethodId, amount: returnValue, customerId: original.customerId, saleId: doc.id, userId: req.user!.id, notes: `Refund for ${invoiceNo}` });
+        await postPayment(tx, { type: "REFUND_OUT", methodId: body.refundMethodId, amount: returnValue, customerId: original.customerId, saleId: doc.id, siteId: original.siteId, userId: req.user!.id, notes: `Refund for ${invoiceNo}` });
         if (original.customerId) await tx.customer.update({ where: { id: original.customerId }, data: { balance: { increment: money(returnValue) } } });
       }
       await tx.auditLog.create({ data: { userId: req.user!.id, action: "SALE_RETURN", entity: "Sale", entityId: doc.id, details: `${invoiceNo} of ${original.invoiceNo} · ₨${returnValue}` } });

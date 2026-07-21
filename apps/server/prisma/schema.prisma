@@ -231,10 +231,31 @@ model Customer {
   bookings Booking[]
   promises PaymentPromise[]
   rateContracts RateContract[]
+  sites    CustomerSite[]
 
   @@index([name])
   @@index([phone])
   @@index([priceGroupId])
+}
+
+// ─────────────────────────── CUSTOMER SITES (C4) ───────────────────────────
+// A contractor buys for several sites/projects. Each sale and each receipt can be tagged
+// with a site so the shop tracks udhaar PER site. Site balances are DERIVED (the same
+// customer-ledger math, filtered by site tag) — there is NO cached per-site balance and
+// NO new invariant: Σ(site balances) + an "unassigned" residual always equals the
+// customer's single balance by construction, so integrity is untouched.
+model CustomerSite {
+  id         String    @id @default(cuid())
+  customerId String
+  customer   Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  name       String                            // "DHA Phase 5 – House 12"
+  address    String?
+  isActive   Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  sales      Sale[]
+  payments   Payment[]
+
+  @@index([customerId])
 }
 
 // ─────────────────────────── PRICE GROUPS (F6) ───────────────────────────
@@ -408,6 +429,8 @@ model Sale {
   returnOfId  String?                                      // original sale if return
   bookingId   String?                                      // set when this invoice fulfils an advance booking (F3)
   booking     Booking?   @relation(fields: [bookingId], references: [id])
+  siteId      String?                                      // C4 — which customer site/project this invoice is for
+  site        CustomerSite? @relation(fields: [siteId], references: [id], onDelete: SetNull)
   createdAt   DateTime   @default(now())
 
   items         SaleItem[]
@@ -418,6 +441,7 @@ model Sale {
   @@index([customerId])
   @@index([status])
   @@index([bookingId])
+  @@index([siteId])
 }
 
 model SaleItem {
@@ -560,6 +584,8 @@ model Payment {
   expense    Expense?      @relation(fields: [expenseId], references: [id])
   userId     String
   user       User          @relation(fields: [userId], references: [id])
+  siteId     String?                              // C4 — customer site this receipt/refund is allocated to
+  site       CustomerSite? @relation(fields: [siteId], references: [id], onDelete: SetNull)
   notes      String?
   createdAt  DateTime      @default(now())
 
@@ -567,6 +593,7 @@ model Payment {
 
   @@index([date])
   @@index([type])
+  @@index([siteId])
 }
 
 // ─────────────────────────── CHEQUES (F1) ───────────────────────────

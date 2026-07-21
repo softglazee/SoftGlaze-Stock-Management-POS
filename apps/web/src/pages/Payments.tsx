@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { HandCoins, Banknote, ArrowDownLeft, ArrowUpRight } from "lucide-react";
 import { api, ApiError } from "../lib/api";
-import { Payment, PaymentType, Account, Customer, Vendor, Paged } from "../lib/types";
+import { Payment, PaymentType, Account, Customer, Vendor, Paged, SiteBalancesView } from "../lib/types";
 import { fmtMoney, num } from "../lib/format";
 import { useAuth } from "../context/AuthContext";
 import { PageHeader, Modal, EmptyState, TableSkeleton, SearchBox, Badge, Pagination, useToast } from "../components/ui";
@@ -134,6 +134,7 @@ export function PaymentModal({ mode, fixedParty, onClose, onDone }: { mode: "rec
   const [methodId, setMethodId] = useState("");
   const [amount, setAmount] = useState("");
   const [billId, setBillId] = useState("");
+  const [siteId, setSiteId] = useState(""); // C4 — allocate a receipt to a customer site
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const methodDefault = methodId || accounts.find((a) => a.isCash)?.id || accounts[0]?.id || "";
@@ -145,12 +146,19 @@ export function PaymentModal({ mode, fixedParty, onClose, onDone }: { mode: "rec
     enabled: !!party,
   });
   const bills = billsData?.bills ?? [];
+  // C4 — the customer's sites (receive mode only), so a receipt can be allocated to one.
+  const { data: siteData } = useQuery({
+    queryKey: ["customer-sites", party?.id],
+    queryFn: () => api<SiteBalancesView>(`/customer-sites?customerId=${party!.id}`),
+    enabled: isReceive && !!party,
+  });
+  const sites = (siteData?.sites ?? []).filter((s) => s.isActive);
 
   const save = useMutation({
     mutationFn: () => {
       const alloc = billId ? (isReceive ? { saleId: billId } : { purchaseId: billId }) : {};
       const body = isReceive
-        ? { customerId: party!.id, methodId: methodDefault, amount: Number(amount), notes: notes || null, ...alloc }
+        ? { customerId: party!.id, methodId: methodDefault, amount: Number(amount), notes: notes || null, ...(siteId && !billId ? { siteId } : {}), ...alloc }
         : { vendorId: party!.id, methodId: methodDefault, amount: Number(amount), notes: notes || null, ...alloc };
       return api<{ payment: { refNo: string } }>(`/payments/${isReceive ? "customer-receipt" : "vendor-payment"}`, { method: "POST", body });
     },
@@ -172,6 +180,15 @@ export function PaymentModal({ mode, fixedParty, onClose, onDone }: { mode: "rec
             <select className="input" value={billId} onChange={(e) => { setBillId(e.target.value); const b = bills.find((x) => x.id === e.target.value); if (b) setAmount(String(num(b.dueAmount))); }}>
               <option value="">Whole balance (oldest first)</option>
               {bills.map((b) => <option key={b.id} value={b.id}>{b.invoiceNo} — due {fmtMoney(b.dueAmount)} · {new Date(b.date).toLocaleDateString()}</option>)}
+            </select>
+          </div>
+        )}
+        {isReceive && sites.length > 0 && !billId && (
+          <div>
+            <label className="label">Allocate to site (optional)</label>
+            <select className="input" value={siteId} onChange={(e) => setSiteId(e.target.value)}>
+              <option value="">No specific site</option>
+              {sites.map((s) => <option key={s.id} value={s.id}>{s.name} — owes {fmtMoney(s.balance)}</option>)}
             </select>
           </div>
         )}

@@ -75,6 +75,7 @@ export async function postPayment(
     saleId?: string | null;
     purchaseId?: string | null;
     expenseId?: string | null;
+    siteId?: string | null; // C4 — customer site this receipt/refund is allocated to
     date?: Date;
     notes?: string | null;
   }
@@ -93,6 +94,7 @@ export async function postPayment(
       saleId: args.saleId ?? null,
       purchaseId: args.purchaseId ?? null,
       expenseId: args.expenseId ?? null,
+      siteId: args.siteId ?? null,
       notes: args.notes ?? null,
       ...(args.date ? { date: args.date } : {}),
     },
