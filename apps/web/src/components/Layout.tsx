@@ -12,33 +12,68 @@ import Calculator from "./Calculator";
 import NotificationBell from "./NotificationBell";
 import { Modal, useToast } from "./ui";
 
-// Sidebar map — items appear as we build each phase.
-// `roles` hides links the user can't use (server still enforces).
-const NAV = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "CASHIER", "ACCOUNTANT"] },
-  { to: "/pos", label: "POS / New Sale", icon: ShoppingCart, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "CASHIER"] },
-  { to: "/sales", label: "Sales", icon: Receipt, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "CASHIER", "ACCOUNTANT"] },
-  { to: "/bookings", label: "Bookings", icon: CalendarClock, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "CASHIER", "ACCOUNTANT"] },
-  { to: "/estimator", label: "Estimator", icon: Building2, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "CASHIER"] },
-  { to: "/products", label: "Products", icon: Package, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "CASHIER", "ACCOUNTANT"] },
-  { to: "/categories", label: "Categories", icon: FolderTree, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER"] },
-  { to: "/brands", label: "Brands", icon: Tag, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER"] },
-  { to: "/units", label: "Units", icon: Ruler, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER"] },
-  { to: "/purchases", label: "Purchases", icon: Truck, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "ACCOUNTANT"] },
-  { to: "/stock", label: "Stock", icon: Boxes, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "ACCOUNTANT"] },
-  { to: "/customers", label: "Customers", icon: Users, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "CASHIER", "ACCOUNTANT"] },
-  { to: "/price-groups", label: "Price Groups", icon: Tags, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER"] },
-  { to: "/vendors", label: "Vendors", icon: Truck, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "ACCOUNTANT"] },
-  { to: "/accounts", label: "Accounts & Cash", icon: Landmark, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "ACCOUNTANT"] },
-  { to: "/payments", label: "Payments", icon: Wallet, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "CASHIER", "ACCOUNTANT"] },
-  { to: "/promises", label: "Promises", icon: HandCoins, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "CASHIER", "ACCOUNTANT"] },
-  { to: "/cheques", label: "Cheques", icon: ScrollText, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "ACCOUNTANT"] },
-  { to: "/expenses", label: "Expenses", icon: Banknote, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "ACCOUNTANT"] },
-  { to: "/employees", label: "Employees", icon: IdCard, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER"] },
-  { to: "/reports", label: "Reports", icon: BarChart3, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "ACCOUNTANT"] },
-  { to: "/messages", label: "Messages", icon: MessageSquare, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER"] },
-  { to: "/users", label: "Users & Roles", icon: UserCog, roles: ["SUPER_ADMIN", "ADMIN"] },
-  { to: "/settings", label: "Settings", icon: Settings, roles: ["SUPER_ADMIN", "ADMIN", "ACCOUNTANT"] },
+// Sidebar map — grouped into sections. `roles` hides links the user can't use
+// (server still enforces). A section header only renders if it has visible items.
+const ALL = ["SUPER_ADMIN", "ADMIN", "MANAGER", "CASHIER", "ACCOUNTANT"];
+const NAV_GROUPS: { section?: string; items: { to: string; label: string; icon: typeof LayoutDashboard; roles: string[] }[] }[] = [
+  {
+    items: [
+      { to: "/", label: "Dashboard", icon: LayoutDashboard, roles: ALL },
+    ],
+  },
+  {
+    section: "Sell",
+    items: [
+      { to: "/pos", label: "POS / New Sale", icon: ShoppingCart, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "CASHIER"] },
+      { to: "/sales", label: "Sales", icon: Receipt, roles: ALL },
+      { to: "/bookings", label: "Bookings", icon: CalendarClock, roles: ALL },
+      { to: "/estimator", label: "Estimator", icon: Building2, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "CASHIER"] },
+    ],
+  },
+  {
+    section: "Inventory",
+    items: [
+      { to: "/products", label: "Products", icon: Package, roles: ALL },
+      { to: "/stock", label: "Stock", icon: Boxes, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "ACCOUNTANT"] },
+      { to: "/purchases", label: "Purchases", icon: Truck, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "ACCOUNTANT"] },
+      { to: "/categories", label: "Categories", icon: FolderTree, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER"] },
+      { to: "/brands", label: "Brands", icon: Tag, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER"] },
+      { to: "/units", label: "Units", icon: Ruler, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER"] },
+    ],
+  },
+  {
+    section: "People",
+    items: [
+      { to: "/customers", label: "Customers", icon: Users, roles: ALL },
+      { to: "/vendors", label: "Vendors", icon: Truck, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "ACCOUNTANT"] },
+      { to: "/price-groups", label: "Price Groups", icon: Tags, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER"] },
+      { to: "/employees", label: "Employees", icon: IdCard, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER"] },
+    ],
+  },
+  {
+    section: "Money",
+    items: [
+      { to: "/accounts", label: "Accounts & Cash", icon: Landmark, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "ACCOUNTANT"] },
+      { to: "/payments", label: "Payments", icon: Wallet, roles: ALL },
+      { to: "/promises", label: "Promises", icon: HandCoins, roles: ALL },
+      { to: "/cheques", label: "Cheques", icon: ScrollText, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "ACCOUNTANT"] },
+      { to: "/expenses", label: "Expenses", icon: Banknote, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "ACCOUNTANT"] },
+    ],
+  },
+  {
+    section: "Insights",
+    items: [
+      { to: "/reports", label: "Reports", icon: BarChart3, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "ACCOUNTANT"] },
+      { to: "/messages", label: "Messages", icon: MessageSquare, roles: ["SUPER_ADMIN", "ADMIN", "MANAGER"] },
+    ],
+  },
+  {
+    section: "Admin",
+    items: [
+      { to: "/users", label: "Users & Roles", icon: UserCog, roles: ["SUPER_ADMIN", "ADMIN"] },
+      { to: "/settings", label: "Settings", icon: Settings, roles: ["SUPER_ADMIN", "ADMIN", "ACCOUNTANT"] },
+    ],
+  },
 ];
 
 export default function Layout() {
@@ -114,25 +149,36 @@ export default function Layout() {
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto p-2 space-y-0.5">
-          {NAV.filter((n) => !user || n.roles.includes(user.role)).map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === "/"}
-              onClick={() => setNavOpen(false)}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                  isActive
-                    ? "bg-surface-2 text-ink font-semibold border border-edge"
-                    : "text-muted hover:text-ink hover:bg-surface-2"
-                }`
-              }
-            >
-              <item.icon size={17} />
-              {item.label}
-            </NavLink>
-          ))}
+        <nav className="flex-1 overflow-y-auto p-2 space-y-2.5">
+          {NAV_GROUPS.map((group, gi) => {
+            const items = group.items.filter((n) => !user || n.roles.includes(user.role));
+            if (!items.length) return null;
+            return (
+              <div key={gi} className="space-y-0.5">
+                {group.section && (
+                  <p className="px-3 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted/60">{group.section}</p>
+                )}
+                {items.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.to === "/"}
+                    onClick={() => setNavOpen(false)}
+                    className={({ isActive }) =>
+                      `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                        isActive
+                          ? "bg-surface-2 text-ink font-semibold border border-edge"
+                          : "text-muted hover:text-ink hover:bg-surface-2"
+                      }`
+                    }
+                  >
+                    <item.icon size={17} />
+                    {item.label}
+                  </NavLink>
+                ))}
+              </div>
+            );
+          })}
         </nav>
 
         <div className="p-3 border-t border-edge">
